@@ -1,0 +1,15 @@
+{
+  "post": {
+    "bucket": "pocket-tts-dev-test",
+    "key": "input/sample.html"
+  },
+  "voice": {
+    "bucket": "pocket-tts-dev-test",
+    "key": "voices/voice_anchor.wav"
+  },
+  "quote_mode": "preserve",
+  "output": {
+    "bucket": "pocket-tts-dev-test",
+    "key": "test-results/job-001.wav"
+  }
+}
