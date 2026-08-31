@@ -3,10 +3,8 @@ import tempfile
 import scipy.io.wavfile as wavfile
 from fastapi import FastAPI
 from fastapi.responses import FileResponse
-from pydantic import BaseModel
-
 from pocket_tts import TTSModel
-
+from pydantic import BaseModel
 
 app = FastAPI(title="Pocket TTS Internal API")
 
@@ -64,6 +62,7 @@ def generate(request: GenerateRequest):
     
 if __name__ == "__main__":
     import os
+
     import uvicorn
 
     uvicorn.run(
