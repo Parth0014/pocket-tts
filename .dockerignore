@@ -1,0 +1,13 @@
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+.git/
+.gitignore
+.env
+output/
+voice_samples/
+sample.html
+tests/
+README.md
+*.wav

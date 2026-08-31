@@ -804,10 +804,52 @@ def load_raw_cache(payload, expected_sr, cache_dir):
 # ============================================================
 # 5. PIPELINE ENTRY POINT
 # ============================================================
+def run_pipeline(
+    post_html_file,
+    narration_reference_audio,
+    quote_reference_audio=None,
+    quote_mode="preserve",
+    output_dir=None,
+):
+    """
+    Run the complete narration pipeline.
 
-def main():
-    environment = load_runtime_environment(BASE_DIR)
-    config = build_runtime_config(BASE_DIR, environment)
+    This is the shared entry point used by both:
+      - the local development runner
+      - the AWS Lambda worker
+
+    The pipeline itself is intentionally unaware of AWS/S3. The caller supplies
+    local filesystem paths. Lambda downloads its S3 inputs into /tmp, calls this
+    function, then uploads the resulting WAV back to S3.
+    """
+    post_html_file = os.path.abspath(os.fspath(post_html_file))
+    narration_reference_audio = os.path.abspath(
+        os.fspath(narration_reference_audio)
+    )
+    quote_reference_audio = (
+        os.path.abspath(os.fspath(quote_reference_audio))
+        if quote_reference_audio
+        else None
+    )
+
+    if output_dir is None:
+        output_dir = os.path.join(BASE_DIR, "output")
+    output_dir = os.path.abspath(os.fspath(output_dir))
+    internal_dir = os.path.join(output_dir, "_internal")
+
+    config = {
+        "base_dir": BASE_DIR,
+        "post_html_file": post_html_file,
+        "narration_reference_audio": narration_reference_audio,
+        "quote_reference_audio": quote_reference_audio,
+        "quote_mode": str(quote_mode).strip().lower(),
+        "output_dir": output_dir,
+        "internal_dir": internal_dir,
+        "raw_cache_dir": os.path.join(internal_dir, "raw_cache"),
+        "voice_state_cache_dir": os.path.join(internal_dir, "voice_states"),
+        "debug_dir": os.path.join(internal_dir, "debug"),
+    }
+
     ffmpeg_path = validate_runtime_config(config)
 
     print("=" * 72)
@@ -859,8 +901,10 @@ def main():
 
     # Mutate directories only after config, references, routing, and ffmpeg pass.
     for directory in (
-        config["output_dir"], config["raw_cache_dir"],
-        config["voice_state_cache_dir"], config["debug_dir"],
+        config["output_dir"],
+        config["raw_cache_dir"],
+        config["voice_state_cache_dir"],
+        config["debug_dir"],
     ):
         os.makedirs(directory, exist_ok=True)
 
@@ -909,16 +953,21 @@ def main():
         print(f"\nLoading PocketTTS {role} model (temp={temperature})...")
         load_start = time.time()
         model = TTSModel.load_model(
-            language=MODEL_LANGUAGE, temp=temperature,
-            lsd_decode_steps=LSD_DECODE_STEPS, noise_clamp=NOISE_CLAMP,
-            eos_threshold=EOS_THRESHOLD, quantize=QUANTIZE,
+            language=MODEL_LANGUAGE,
+            temp=temperature,
+            lsd_decode_steps=LSD_DECODE_STEPS,
+            noise_clamp=NOISE_CLAMP,
+            eos_threshold=EOS_THRESHOLD,
+            quantize=QUANTIZE,
         )
         print(f"  Loaded in {time.time() - load_start:.1f}s on {model.device}")
         role_sample_rate = int(model.sample_rate)
         if sample_rate is None:
             sample_rate = role_sample_rate
         elif role_sample_rate != sample_rate:
-            raise RuntimeError("Narration and quote models report different sample rates")
+            raise RuntimeError(
+                "Narration and quote models report different sample rates"
+            )
         models[role] = model
         identities[role] = model_identity_for(model, role, temperature)
         count_tokens[role] = count_tokens_for(model)
@@ -929,7 +978,9 @@ def main():
     voice_identities = {}
     for role in roles:
         state, _state_path, voice_identity = load_or_build_voice_state(
-            models[role], anchor_paths[role], identities[role],
+            models[role],
+            anchor_paths[role],
+            identities[role],
             config["voice_state_cache_dir"],
         )
         voice_identity["reference_audio_sha256"] = anchor_metadata[role]["source_sha256"]
@@ -942,7 +993,9 @@ def main():
     narration_chunk_count = sum(
         1 for chunk in all_chunks if chunk["role"] == "narration"
     )
-    quote_chunk_count = sum(1 for chunk in all_chunks if chunk["role"] == "quote")
+    quote_chunk_count = sum(
+        1 for chunk in all_chunks if chunk["role"] == "quote"
+    )
 
     print(
         f"\nTotal chunks: {len(all_chunks)} "
@@ -974,12 +1027,24 @@ def main():
         chunk_text = record["text"]
         chunk_seed = resolved_seed(chunk_text, index)
         cache_payload = raw_generation_payload(
-            chunk_text, chunk_seed, role, temperatures[role],
-            identities[role], voice_identities[role],
+            chunk_text,
+            chunk_seed,
+            role,
+            temperatures[role],
+            identities[role],
+            voice_identities[role],
         )
         (
-            audio_chunk, reject_reason, _raw_key, raw_path, raw_manifest_path
-        ) = load_raw_cache(cache_payload, model.sample_rate, config["raw_cache_dir"])
+            audio_chunk,
+            reject_reason,
+            _raw_key,
+            raw_path,
+            raw_manifest_path,
+        ) = load_raw_cache(
+            cache_payload,
+            model.sample_rate,
+            config["raw_cache_dir"],
+        )
 
         if audio_chunk is not None:
             print(f"[{index}/{len(all_chunks)}] ({role}) Raw cache hit: {raw_path}")
@@ -996,32 +1061,50 @@ def main():
             torch.manual_seed(chunk_seed)
             try:
                 audio_chunk = model.generate_audio(
-                    voice_states[role], chunk_text,
-                    frames_after_eos=FRAMES_AFTER_EOS, copy_state=True,
+                    voice_states[role],
+                    chunk_text,
+                    frames_after_eos=FRAMES_AFTER_EOS,
+                    copy_state=True,
                 )
                 if audio_chunk is None or audio_chunk.numel() == 0:
                     raise RuntimeError(f"No audio generated for chunk {index}")
                 audio_chunk = audio_chunk.detach().cpu()
                 if audio_chunk.dim() == 1:
                     audio_chunk = audio_chunk.unsqueeze(0)
-                validate_audio_tensor(audio_chunk, model.sample_rate, model.sample_rate)
-                atomic_save_audio(raw_path, audio_chunk, model.sample_rate, subtype="FLOAT")
-                atomic_write_json(raw_manifest_path, {
-                    "payload": cache_payload,
-                    "wav_sha256": sha256_file(raw_path),
-                    "frames": int(audio_chunk.shape[1]),
-                    "created_utc": datetime.now(timezone.utc).isoformat(),
-                })
+                validate_audio_tensor(
+                    audio_chunk,
+                    model.sample_rate,
+                    model.sample_rate,
+                )
+                atomic_save_audio(
+                    raw_path,
+                    audio_chunk,
+                    model.sample_rate,
+                    subtype="FLOAT",
+                )
+                atomic_write_json(
+                    raw_manifest_path,
+                    {
+                        "payload": cache_payload,
+                        "wav_sha256": sha256_file(raw_path),
+                        "frames": int(audio_chunk.shape[1]),
+                        "created_utc": datetime.now(timezone.utc).isoformat(),
+                    },
+                )
             except Exception as exc:
                 print(f"\nERROR generating raw chunk {index} ({role}): {exc}")
                 raise
 
         raw_duration = audio_chunk.shape[1] / model.sample_rate
         with tempfile.TemporaryDirectory(
-            prefix="chunk_render_", dir=config["internal_dir"]
+            prefix="chunk_render_",
+            dir=config["internal_dir"],
         ) as chunk_temp_dir:
             processed = render_raw_chunk(
-                audio_chunk, sr, RENDER_SPEED, chunk_temp_dir,
+                audio_chunk,
+                sr,
+                RENDER_SPEED,
+                chunk_temp_dir,
                 ffmpeg_path=ffmpeg_path,
             )
         processed_outputs.append(processed)
@@ -1045,7 +1128,13 @@ def main():
     lead_target = int(round(sr * LEAD_IN_MS / 1000))
     lead_zero = max(lead_target - first_lead, 0)
     if lead_zero:
-        pieces.append(torch.zeros(1, lead_zero, dtype=final_chunks[0]["audio"].dtype))
+        pieces.append(
+            torch.zeros(
+                1,
+                lead_zero,
+                dtype=final_chunks[0]["audio"].dtype,
+            )
+        )
 
     for index, item in enumerate(final_chunks):
         pieces.append(item["audio"])
@@ -1066,7 +1155,13 @@ def main():
         target_samples = int(round(sr * target_ms / 1000))
         inserted_zero = max(target_samples - natural_pad, 0)
         if inserted_zero:
-            pieces.append(torch.zeros(1, inserted_zero, dtype=item["audio"].dtype))
+            pieces.append(
+                torch.zeros(
+                    1,
+                    inserted_zero,
+                    dtype=item["audio"].dtype,
+                )
+            )
 
     joined_audio = torch.cat(pieces, dim=1)
 
@@ -1074,7 +1169,11 @@ def main():
     final_output = reserve_numbered_output_path(config["output_dir"])
     try:
         atomic_save_audio(
-            final_output, joined_audio, sr, subtype="PCM_16", verify_samples=False
+            final_output,
+            joined_audio,
+            sr,
+            subtype="PCM_16",
+            verify_samples=False,
         )
     except Exception:
         try:
@@ -1098,6 +1197,25 @@ def main():
         f"quote: {quote_chunk_count})"
     )
     return final_output
+
+
+def main():
+    """
+    Local development entry point.
+
+    This keeps the existing CLI behavior while delegating all actual work to
+    the same run_pipeline() function that AWS Lambda will use.
+    """
+    environment = load_runtime_environment(BASE_DIR)
+    config = build_runtime_config(BASE_DIR, environment)
+
+    return run_pipeline(
+        post_html_file=config["post_html_file"],
+        narration_reference_audio=config["narration_reference_audio"],
+        quote_reference_audio=config["quote_reference_audio"],
+        quote_mode=config["quote_mode"],
+        output_dir=config["output_dir"],
+    )
 
 
 if __name__ == "__main__":

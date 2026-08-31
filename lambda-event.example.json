@@ -1,0 +1,15 @@
+{
+  "post": {
+    "bucket": "YOUR-TEST-BUCKET",
+    "key": "test-input/sample.html"
+  },
+  "voice": {
+    "bucket": "YOUR-TEST-BUCKET",
+    "key": "voice-samples/narrator.wav"
+  },
+  "quote_mode": "preserve",
+  "output": {
+    "bucket": "YOUR-TEST-BUCKET",
+    "key": "test-results/example.wav"
+  }
+}

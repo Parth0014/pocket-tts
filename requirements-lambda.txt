@@ -1,0 +1,7 @@
+pocket-tts==2.1.0
+numpy
+scipy
+soundfile
+torch
+imageio-ffmpeg
+boto3
