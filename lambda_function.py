@@ -7,7 +7,6 @@ from pathlib import Path
 import boto3
 from botocore.exceptions import ClientError
 
-from generate_narration import run_pipeline
 
 
 s3 = boto3.client("s3")
@@ -371,10 +370,36 @@ def _upload_s3_file_immutable(local_path, bucket, key):
 
 
 def _process_job(job, require_schema_v1=False):
-    job = _validate_job(
-        job,
-        require_schema_v1=require_schema_v1,
-    )
+    raw_job = job
+
+    try:
+        job = _validate_job(
+            raw_job,
+            require_schema_v1=require_schema_v1,
+        )
+
+    except Exception as exc:
+        raw_job_id = (
+            raw_job.get("job_id")
+            if isinstance(raw_job, dict)
+            else None
+        )
+
+        raw_generation_id = (
+            raw_job.get("generation_id")
+            if isinstance(raw_job, dict)
+            else None
+        )
+
+        _log(
+            "job_rejected",
+            job_id=raw_job_id,
+            generation_id=raw_generation_id,
+            error_type=type(exc).__name__,
+            error=str(exc),
+        )
+
+        raise
 
     job_id = job.get(
         "job_id",
@@ -407,6 +432,20 @@ def _process_job(job, require_schema_v1=False):
     )
 
     try:
+        _log(
+            "loading_narration_module",
+            job_id=job_id,
+            generation_id=generation_id,
+        )
+
+        from generate_narration import run_pipeline
+
+        _log(
+            "narration_module_loaded",
+            job_id=job_id,
+            generation_id=generation_id,
+        )
+
         post_path = os.path.join(
             work_dir,
             "post.html",
