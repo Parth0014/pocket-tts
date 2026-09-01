@@ -5,6 +5,7 @@ import tempfile
 from pathlib import Path
 
 import boto3
+from botocore.exceptions import ClientError
 
 from generate_narration import run_pipeline
 
@@ -12,49 +13,424 @@ from generate_narration import run_pipeline
 s3 = boto3.client("s3")
 
 
-def _download_s3_file(bucket, key, destination):
-    Path(destination).parent.mkdir(parents=True, exist_ok=True)
-    s3.download_file(bucket, key, destination)
-    return destination
+DEV_BUCKET = "pocket-tts-dev-test"
+
+VALID_QUOTE_MODES = {
+    "preserve",
+    "exclude",
+    "two_voice",
+}
+
+POST_READ_PREFIXES = (
+    "input/",      # existing legacy test path
+    "ghost/",      # future immutable Ghost snapshots
+)
+
+VOICE_READ_PREFIXES = (
+    "voices/",
+)
+
+OUTPUT_WRITE_PREFIXES = (
+    "test-results/",   # existing legacy test path
+    "generations/",    # future Studio generations
+    "voice-tests/",    # future voice tests
+)
 
 
-def _upload_s3_file(local_path, bucket, key):
-    s3.upload_file(
-        local_path,
-        bucket,
-        key,
-        ExtraArgs={"ContentType": "audio/wav"},
+def _log(event_name, **fields):
+    payload = {
+        "event": event_name,
+        **fields,
+    }
+
+    print(
+        json.dumps(
+            payload,
+            sort_keys=True,
+            default=str,
+        )
     )
 
 
-def _process_job(job):
-    """
-    Process one test/worker job.
+def _require_mapping(parent, name):
+    value = parent.get(name)
 
-    Expected event:
-    {
-      "post": {"bucket": "...", "key": "input/post.html"},
-      "voice": {"bucket": "...", "key": "voices/narrator.wav"},
-      "quote_voice": {"bucket": "...", "key": "voices/quote.wav"},
-      "quote_mode": "preserve",
-      "output": {"bucket": "...", "key": "test-results/job-123.wav"}
+    if not isinstance(value, dict):
+        raise ValueError(
+            f"{name} must be an object"
+        )
+
+    return value
+
+
+def _require_string(parent, name):
+    value = parent.get(name)
+
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(
+            f"{name} must be a non-empty string"
+        )
+
+    return value.strip()
+
+
+def _validate_s3_key(key, allowed_prefixes, expected_suffix=None):
+    if not isinstance(key, str) or not key:
+        raise ValueError("S3 key must be a non-empty string")
+
+    if "\\" in key or key.startswith("/"):
+        raise ValueError(
+            f"Invalid S3 key: {key!r}"
+        )
+
+    parts = key.split("/")
+
+    if any(part in {"", ".", ".."} for part in parts):
+        raise ValueError(
+            f"Unsafe S3 key: {key!r}"
+        )
+
+    if not any(
+        key.startswith(prefix)
+        for prefix in allowed_prefixes
+    ):
+        raise ValueError(
+            f"S3 key is outside allowed prefixes: {key!r}"
+        )
+
+    if expected_suffix and not key.lower().endswith(expected_suffix):
+        raise ValueError(
+            f"S3 key must end with {expected_suffix}: {key!r}"
+        )
+
+
+def _validate_location(
+    location,
+    name,
+    allowed_prefixes,
+    expected_suffix,
+):
+    if not isinstance(location, dict):
+        raise ValueError(
+            f"{name} must be an object"
+        )
+
+    bucket = _require_string(location, "bucket")
+    key = _require_string(location, "key")
+
+    if bucket != DEV_BUCKET:
+        raise ValueError(
+            f"{name}.bucket must be {DEV_BUCKET!r}"
+        )
+
+    _validate_s3_key(
+        key,
+        allowed_prefixes,
+        expected_suffix,
+    )
+
+    return {
+        **location,
+        "bucket": bucket,
+        "key": key,
     }
 
-    quote_voice is optional unless quote_mode == "two_voice".
+
+def _validate_job(job, require_schema_v1=False):
+    if not isinstance(job, dict):
+        raise ValueError(
+            "Job payload must be a JSON object"
+        )
+
+    schema_version = job.get("schema_version")
+
+    # Future SQS traffic must always use the explicit V1 contract.
+    if require_schema_v1 and schema_version != 1:
+        raise ValueError(
+            "SQS jobs must use schema_version 1"
+        )
+
+    # Direct invocation may still use the old test contract
+    # until the old test harness is retired.
+    if schema_version not in (None, 1):
+        raise ValueError(
+            f"Unsupported schema_version: {schema_version!r}"
+        )
+
+    quote_mode = job.get(
+        "quote_mode",
+        "preserve",
+    )
+
+    if quote_mode not in VALID_QUOTE_MODES:
+        raise ValueError(
+            "quote_mode must be one of: "
+            "preserve, exclude, two_voice"
+        )
+
+    post = _validate_location(
+        _require_mapping(job, "post"),
+        "post",
+        POST_READ_PREFIXES,
+        ".html",
+    )
+
+    voice = _validate_location(
+        _require_mapping(job, "voice"),
+        "voice",
+        VOICE_READ_PREFIXES,
+        ".wav",
+    )
+
+    output = _validate_location(
+        _require_mapping(job, "output"),
+        "output",
+        OUTPUT_WRITE_PREFIXES,
+        ".wav",
+    )
+
+    quote_voice = job.get("quote_voice")
+
+    if quote_voice is not None:
+        quote_voice = _validate_location(
+            quote_voice,
+            "quote_voice",
+            VOICE_READ_PREFIXES,
+            ".wav",
+        )
+
+    if quote_mode == "two_voice" and quote_voice is None:
+        raise ValueError(
+            "quote_voice is required when quote_mode is two_voice"
+        )
+
+    validated = {
+        **job,
+        "post": post,
+        "voice": voice,
+        "output": output,
+        "quote_mode": quote_mode,
+    }
+
+    if quote_voice is not None:
+        validated["quote_voice"] = quote_voice
+
+    # -------------------------------
+    # V1 Studio-generation contract
+    # -------------------------------
+
+    if schema_version == 1:
+        job_id = _require_string(job, "job_id")
+        generation_id = _require_string(
+            job,
+            "generation_id",
+        )
+        post_id = _require_string(job, "post_id")
+        content_hash = _require_string(
+            job,
+            "content_hash",
+        )
+
+        voice_id = _require_string(
+            voice,
+            "voice_id",
+        )
+
+        if len(content_hash) != 64 or any(
+            char not in "0123456789abcdefABCDEF"
+            for char in content_hash
+        ):
+            raise ValueError(
+                "content_hash must be a SHA-256 hex digest"
+            )
+
+        expected_post_key = (
+            f"ghost/{post_id}/{content_hash}.html"
+        )
+
+        if post["key"] != expected_post_key:
+            raise ValueError(
+                "V1 post key must be exactly "
+                f"{expected_post_key!r}"
+            )
+
+        expected_output = (
+            f"generations/{generation_id}/output.wav"
+        )
+
+        if output["key"] != expected_output:
+            raise ValueError(
+                "V1 generation output must be exactly "
+                f"{expected_output!r}"
+            )
+
+        expected_voice_prefix = (
+            f"voices/{voice_id}/"
+        )
+
+        if not voice["key"].startswith(
+            expected_voice_prefix
+        ):
+            raise ValueError(
+                "voice key does not match voice_id"
+            )
+
+        if quote_voice is not None:
+            quote_voice_id = _require_string(
+                quote_voice,
+                "voice_id",
+            )
+
+            expected_quote_prefix = (
+                f"voices/{quote_voice_id}/"
+            )
+
+            if not quote_voice["key"].startswith(
+                expected_quote_prefix
+            ):
+                raise ValueError(
+                    "quote_voice key does not match voice_id"
+                )
+
+        validated.update(
+            {
+                "schema_version": 1,
+                "job_id": job_id,
+                "generation_id": generation_id,
+                "post_id": post_id,
+                "content_hash": content_hash,
+            }
+        )
+
+    return validated
+
+
+def _download_s3_file(bucket, key, destination):
+    Path(destination).parent.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
+
+    s3.download_file(
+        bucket,
+        key,
+        destination,
+    )
+
+    return destination
+
+
+def _upload_s3_file_immutable(local_path, bucket, key):
     """
-    work_dir = tempfile.mkdtemp(prefix="pockettts-")
-    output_dir = os.path.join(work_dir, "output")
+    Upload only when this object key does not already exist.
+
+    This prevents accidental generation overwrites even though
+    S3 versioning is enabled.
+    """
 
     try:
-        post_path = os.path.join(work_dir, "post.html")
-        voice_path = os.path.join(work_dir, "narration_voice.wav")
+        with open(local_path, "rb") as body:
+            s3.put_object(
+                Bucket=bucket,
+                Key=key,
+                Body=body,
+                ContentType="audio/wav",
+                IfNoneMatch="*",
+            )
+
+    except ClientError as exc:
+        error_code = str(
+            exc.response.get(
+                "Error",
+                {},
+            ).get(
+                "Code",
+                "",
+            )
+        )
+
+        status_code = (
+            exc.response.get(
+                "ResponseMetadata",
+                {},
+            ).get(
+                "HTTPStatusCode"
+            )
+        )
+
+        if error_code in {
+            "PreconditionFailed",
+            "412",
+        } or status_code == 412:
+            raise RuntimeError(
+                f"Output object already exists: "
+                f"s3://{bucket}/{key}"
+            ) from exc
+
+        raise
+
+
+def _process_job(job, require_schema_v1=False):
+    job = _validate_job(
+        job,
+        require_schema_v1=require_schema_v1,
+    )
+
+    job_id = job.get(
+        "job_id",
+        "legacy-direct-job",
+    )
+
+    generation_id = job.get(
+        "generation_id",
+        "legacy-direct-generation",
+    )
+
+    work_dir = tempfile.mkdtemp(
+        prefix="pockettts-"
+    )
+
+    output_dir = os.path.join(
+        work_dir,
+        "output",
+    )
+
+    _log(
+        "job_started",
+        job_id=job_id,
+        generation_id=generation_id,
+        schema_version=job.get(
+            "schema_version",
+            "legacy",
+        ),
+        quote_mode=job["quote_mode"],
+    )
+
+    try:
+        post_path = os.path.join(
+            work_dir,
+            "post.html",
+        )
+
+        voice_path = os.path.join(
+            work_dir,
+            "narration_voice.wav",
+        )
+
         quote_voice_path = None
+
+        _log(
+            "downloading_inputs",
+            job_id=job_id,
+            generation_id=generation_id,
+        )
 
         _download_s3_file(
             job["post"]["bucket"],
             job["post"]["key"],
             post_path,
         )
+
         _download_s3_file(
             job["voice"]["bucket"],
             job["voice"]["key"],
@@ -62,65 +438,118 @@ def _process_job(job):
         )
 
         if job.get("quote_voice"):
-            quote_voice_path = os.path.join(work_dir, "quote_voice.wav")
+            quote_voice_path = os.path.join(
+                work_dir,
+                "quote_voice.wav",
+            )
+
             _download_s3_file(
                 job["quote_voice"]["bucket"],
                 job["quote_voice"]["key"],
                 quote_voice_path,
             )
 
+        _log(
+            "tts_started",
+            job_id=job_id,
+            generation_id=generation_id,
+        )
+
         output_path = run_pipeline(
             post_html_file=post_path,
             narration_reference_audio=voice_path,
             quote_reference_audio=quote_voice_path,
-            quote_mode=job.get("quote_mode", "preserve"),
+            quote_mode=job["quote_mode"],
             output_dir=output_dir,
         )
 
         destination = job["output"]
-        _upload_s3_file(
+
+        _log(
+            "upload_started",
+            job_id=job_id,
+            generation_id=generation_id,
+            output_key=destination["key"],
+        )
+
+        _upload_s3_file_immutable(
             output_path,
             destination["bucket"],
             destination["key"],
         )
 
+        _log(
+            "job_completed",
+            job_id=job_id,
+            generation_id=generation_id,
+            output_key=destination["key"],
+        )
+
         return {
             "status": "completed",
+            "job_id": job_id,
+            "generation_id": generation_id,
             "output": {
                 "bucket": destination["bucket"],
                 "key": destination["key"],
             },
         }
+
+    except Exception as exc:
+        _log(
+            "job_failed",
+            job_id=job_id,
+            generation_id=generation_id,
+            error_type=type(exc).__name__,
+            error=str(exc),
+        )
+
+        raise
+
     finally:
-        shutil.rmtree(work_dir, ignore_errors=True)
+        shutil.rmtree(
+            work_dir,
+            ignore_errors=True,
+        )
 
 
 def lambda_handler(event, context):
     """
-    Lambda entry point.
-
     Supports:
-      1. Direct invocation with one job object.
-      2. SQS events containing one or more job messages.
 
-    The SQS path is intentionally thin: SQS/Lambda concerns stay here while
-    narration behavior stays entirely inside run_pipeline().
+    1. Direct Lambda invocation.
+       Legacy direct test jobs remain supported.
+
+    2. Future SQS jobs.
+       SQS requires schema_version == 1.
     """
-    # SQS -> Lambda
-    if event.get("Records") and all(
+
+    records = event.get("Records")
+
+    if records and all(
         record.get("eventSource") == "aws:sqs"
-        for record in event["Records"]
+        for record in records
     ):
         results = []
 
-        for record in event["Records"]:
-            body = json.loads(record["body"])
-            results.append(_process_job(body))
+        for record in records:
+            body = json.loads(
+                record["body"]
+            )
+
+            results.append(
+                _process_job(
+                    body,
+                    require_schema_v1=True,
+                )
+            )
 
         return {
             "status": "completed",
             "results": results,
         }
 
-    # Direct Lambda invocation for internal testing.
-    return _process_job(event)
+    return _process_job(
+        event,
+        require_schema_v1=False,
+    )
