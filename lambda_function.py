@@ -72,6 +72,33 @@ def _require_string(parent, name):
     return value.strip()
 
 
+SAFE_ID_CHARS = frozenset(
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+    "abcdefghijklmnopqrstuvwxyz"
+    "0123456789_-"
+)
+
+
+def _require_safe_id(parent, name):
+    raw_value = parent.get(name)
+    value = _require_string(parent, name)
+
+    if raw_value != value:
+        raise ValueError(
+            f"{name} must not contain leading or trailing whitespace"
+        )
+
+    if (
+        len(value) > 128
+        or any(char not in SAFE_ID_CHARS for char in value)
+    ):
+        raise ValueError(
+            f"{name} must match ^[A-Za-z0-9_-]{{1,128}}$"
+        )
+
+    return value
+
+
 def _validate_s3_key(key, allowed_prefixes, expected_suffix=None):
     if not isinstance(key, str) or not key:
         raise ValueError("S3 key must be a non-empty string")
@@ -134,6 +161,49 @@ def _validate_location(
     }
 
 
+V1_JOB_FIELDS = frozenset(
+    {
+        "schema_version",
+        "job_id",
+        "generation_id",
+        "post_id",
+        "content_hash",
+        "post",
+        "voice",
+        "quote_mode",
+        "output",
+        "quote_voice",
+    }
+)
+
+V1_LOCATION_FIELDS = frozenset(
+    {
+        "bucket",
+        "key",
+    }
+)
+
+V1_VOICE_FIELDS = frozenset(
+    {
+        "voice_id",
+        "bucket",
+        "key",
+    }
+)
+
+
+def _reject_unknown_fields(parent, allowed_fields, name):
+    unknown_fields = sorted(
+        set(parent.keys()) - allowed_fields
+    )
+
+    if unknown_fields:
+        raise ValueError(
+            f"{name} contains unknown fields: "
+            + ", ".join(unknown_fields)
+        )
+
+
 def _validate_job(job, require_schema_v1=False):
     if not isinstance(job, dict):
         raise ValueError(
@@ -142,18 +212,35 @@ def _validate_job(job, require_schema_v1=False):
 
     schema_version = job.get("schema_version")
 
+    is_schema_v1 = (
+        type(schema_version) is int
+        and schema_version == 1
+    )
+
     # Future SQS traffic must always use the explicit V1 contract.
-    if require_schema_v1 and schema_version != 1:
+    if require_schema_v1 and not is_schema_v1:
         raise ValueError(
             "SQS jobs must use schema_version 1"
         )
 
     # Direct invocation may still use the old test contract
     # until the old test harness is retired.
-    if schema_version not in (None, 1):
+    if schema_version is not None and not is_schema_v1:
         raise ValueError(
             f"Unsupported schema_version: {schema_version!r}"
         )
+
+    if is_schema_v1:
+        _reject_unknown_fields(
+            job,
+            V1_JOB_FIELDS,
+            "job",
+        )
+
+        if "quote_mode" not in job:
+            raise ValueError(
+                "quote_mode is required for schema_version 1"
+            )
 
     quote_mode = job.get(
         "quote_mode",
@@ -166,32 +253,93 @@ def _validate_job(job, require_schema_v1=False):
             "preserve, exclude, two_voice"
         )
 
+    post_raw = _require_mapping(
+        job,
+        "post",
+    )
+
+    voice_raw = _require_mapping(
+        job,
+        "voice",
+    )
+
+    output_raw = _require_mapping(
+        job,
+        "output",
+    )
+
+    has_quote_voice = "quote_voice" in job
+    quote_voice_raw = job.get("quote_voice")
+
+    if is_schema_v1:
+        _reject_unknown_fields(
+            post_raw,
+            V1_LOCATION_FIELDS,
+            "post",
+        )
+
+        _reject_unknown_fields(
+            voice_raw,
+            V1_VOICE_FIELDS,
+            "voice",
+        )
+
+        _reject_unknown_fields(
+            output_raw,
+            V1_LOCATION_FIELDS,
+            "output",
+        )
+
+        if quote_mode == "two_voice":
+            if not has_quote_voice:
+                raise ValueError(
+                    "quote_voice is required when "
+                    "quote_mode is two_voice"
+                )
+        elif has_quote_voice:
+            raise ValueError(
+                "quote_voice must be absent unless "
+                "quote_mode is two_voice"
+            )
+
+        if quote_mode == "two_voice":
+            if not isinstance(quote_voice_raw, dict):
+                raise ValueError(
+                    "quote_voice must be an object"
+                )
+
+            _reject_unknown_fields(
+                quote_voice_raw,
+                V1_VOICE_FIELDS,
+                "quote_voice",
+            )
+
     post = _validate_location(
-        _require_mapping(job, "post"),
+        post_raw,
         "post",
         POST_READ_PREFIXES,
         ".html",
     )
 
     voice = _validate_location(
-        _require_mapping(job, "voice"),
+        voice_raw,
         "voice",
         VOICE_READ_PREFIXES,
         ".wav",
     )
 
     output = _validate_location(
-        _require_mapping(job, "output"),
+        output_raw,
         "output",
         OUTPUT_WRITE_PREFIXES,
         ".wav",
     )
 
-    quote_voice = job.get("quote_voice")
+    quote_voice = None
 
-    if quote_voice is not None:
+    if quote_voice_raw is not None:
         quote_voice = _validate_location(
-            quote_voice,
+            quote_voice_raw,
             "quote_voice",
             VOICE_READ_PREFIXES,
             ".wav",
@@ -202,106 +350,174 @@ def _validate_job(job, require_schema_v1=False):
             "quote_voice is required when quote_mode is two_voice"
         )
 
-    validated = {
-        **job,
-        "post": post,
-        "voice": voice,
-        "output": output,
-        "quote_mode": quote_mode,
-    }
+    # Preserve the legacy direct-invocation contract.
+    if not is_schema_v1:
+        validated = {
+            **job,
+            "post": post,
+            "voice": voice,
+            "output": output,
+            "quote_mode": quote_mode,
+        }
+
+        if quote_voice is not None:
+            validated["quote_voice"] = quote_voice
+
+        return validated
+
+    # -------------------------------
+    # Frozen V1 Studio-generation contract
+    # -------------------------------
+
+    job_id = _require_safe_id(
+        job,
+        "job_id",
+    )
+
+    generation_id = _require_safe_id(
+        job,
+        "generation_id",
+    )
+
+    post_id = _require_safe_id(
+        job,
+        "post_id",
+    )
+
+    raw_content_hash = job.get("content_hash")
+
+    content_hash = _require_string(
+        job,
+        "content_hash",
+    )
+
+    if (
+        raw_content_hash != content_hash
+        or len(content_hash) != 64
+        or any(
+            char not in "0123456789abcdef"
+            for char in content_hash
+        )
+    ):
+        raise ValueError(
+            "content_hash must be a SHA-256 "
+            "lowercase hex digest"
+        )
+
+    voice_id = _require_safe_id(
+        voice_raw,
+        "voice_id",
+    )
+
+    # V1 values are exact contract values. Do not silently
+    # normalize surrounding whitespace in bucket/key strings.
+    location_pairs = [
+        ("post", post_raw, post),
+        ("voice", voice_raw, voice),
+        ("output", output_raw, output),
+    ]
 
     if quote_voice is not None:
-        validated["quote_voice"] = quote_voice
-
-    # -------------------------------
-    # V1 Studio-generation contract
-    # -------------------------------
-
-    if schema_version == 1:
-        job_id = _require_string(job, "job_id")
-        generation_id = _require_string(
-            job,
-            "generation_id",
-        )
-        post_id = _require_string(job, "post_id")
-        content_hash = _require_string(
-            job,
-            "content_hash",
+        location_pairs.append(
+            (
+                "quote_voice",
+                quote_voice_raw,
+                quote_voice,
+            )
         )
 
-        voice_id = _require_string(
-            voice,
+    for location_name, raw_location, normalized_location in location_pairs:
+        for field_name in ("bucket", "key"):
+            if (
+                raw_location.get(field_name)
+                != normalized_location[field_name]
+            ):
+                raise ValueError(
+                    f"{location_name}.{field_name} must not "
+                    "contain leading or trailing whitespace"
+                )
+
+    expected_post_key = (
+        f"ghost/{post_id}/{content_hash}.html"
+    )
+
+    if post["key"] != expected_post_key:
+        raise ValueError(
+            "V1 post key must be exactly "
+            f"{expected_post_key!r}"
+        )
+
+    expected_output_key = (
+        f"generations/{generation_id}/output.wav"
+    )
+
+    if output["key"] != expected_output_key:
+        raise ValueError(
+            "V1 generation output must be exactly "
+            f"{expected_output_key!r}"
+        )
+
+    expected_voice_key = (
+        f"voices/{voice_id}/reference.wav"
+    )
+
+    if voice["key"] != expected_voice_key:
+        raise ValueError(
+            "V1 voice key must be exactly "
+            f"{expected_voice_key!r}"
+        )
+
+    quote_voice_id = None
+
+    if quote_voice is not None:
+        quote_voice_id = _require_safe_id(
+            quote_voice_raw,
             "voice_id",
         )
 
-        if len(content_hash) != 64 or any(
-            char not in "0123456789abcdefABCDEF"
-            for char in content_hash
-        ):
-            raise ValueError(
-                "content_hash must be a SHA-256 hex digest"
-            )
-
-        expected_post_key = (
-            f"ghost/{post_id}/{content_hash}.html"
+        expected_quote_voice_key = (
+            f"voices/{quote_voice_id}/reference.wav"
         )
 
-        if post["key"] != expected_post_key:
+        if quote_voice["key"] != expected_quote_voice_key:
             raise ValueError(
-                "V1 post key must be exactly "
-                f"{expected_post_key!r}"
+                "V1 quote_voice key must be exactly "
+                f"{expected_quote_voice_key!r}"
             )
 
-        expected_output = (
-            f"generations/{generation_id}/output.wav"
-        )
+    # Construct a canonical object rather than returning **job.
+    # The idempotency fingerprint therefore contains only frozen
+    # V1 contract fields.
+    validated = {
+        "schema_version": 1,
+        "job_id": job_id,
+        "generation_id": generation_id,
+        "post_id": post_id,
+        "content_hash": content_hash,
+        "post": {
+            "bucket": post["bucket"],
+            "key": post["key"],
+        },
+        "voice": {
+            "voice_id": voice_id,
+            "bucket": voice["bucket"],
+            "key": voice["key"],
+        },
+        "quote_mode": quote_mode,
+        "output": {
+            "bucket": output["bucket"],
+            "key": output["key"],
+        },
+    }
 
-        if output["key"] != expected_output:
-            raise ValueError(
-                "V1 generation output must be exactly "
-                f"{expected_output!r}"
-            )
-
-        expected_voice_prefix = (
-            f"voices/{voice_id}/"
-        )
-
-        if not voice["key"].startswith(
-            expected_voice_prefix
-        ):
-            raise ValueError(
-                "voice key does not match voice_id"
-            )
-
-        if quote_voice is not None:
-            quote_voice_id = _require_string(
-                quote_voice,
-                "voice_id",
-            )
-
-            expected_quote_prefix = (
-                f"voices/{quote_voice_id}/"
-            )
-
-            if not quote_voice["key"].startswith(
-                expected_quote_prefix
-            ):
-                raise ValueError(
-                    "quote_voice key does not match voice_id"
-                )
-
-        validated.update(
-            {
-                "schema_version": 1,
-                "job_id": job_id,
-                "generation_id": generation_id,
-                "post_id": post_id,
-                "content_hash": content_hash,
-            }
-        )
+    if quote_voice is not None:
+        validated["quote_voice"] = {
+            "voice_id": quote_voice_id,
+            "bucket": quote_voice["bucket"],
+            "key": quote_voice["key"],
+        }
 
     return validated
-
 
 def _download_s3_file(bucket, key, destination):
     Path(destination).parent.mkdir(
