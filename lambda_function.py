@@ -1,3 +1,4 @@
+import hashlib
 import json
 import os
 import shutil
@@ -6,8 +7,6 @@ from pathlib import Path
 
 import boto3
 from botocore.exceptions import ClientError
-
-
 
 s3 = boto3.client("s3")
 
@@ -318,24 +317,141 @@ def _download_s3_file(bucket, key, destination):
 
     return destination
 
-
-def _upload_s3_file_immutable(local_path, bucket, key):
+def _job_fingerprint(job):
     """
-    Upload only when this object key does not already exist.
+    Return a deterministic SHA-256 fingerprint for the complete
+    validated job payload.
 
-    This prevents accidental generation overwrites even though
-    S3 versioning is enabled.
+    SQS may deliver the same message more than once. The fingerprint
+    lets us distinguish a true retry from an accidental reuse of the
+    same generation output key for a different job.
+    """
+
+    canonical_job = json.dumps(
+        job,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+    )
+
+    return hashlib.sha256(
+        canonical_job.encode("utf-8")
+    ).hexdigest()
+
+
+def _get_existing_output_metadata(bucket, key):
+    """
+    Return S3 user metadata when an output object exists.
+
+    Return None only when the object definitely does not exist.
+    Other S3 errors are propagated.
     """
 
     try:
-        with open(local_path, "rb") as body:
-            s3.put_object(
-                Bucket=bucket,
-                Key=key,
-                Body=body,
-                ContentType="audio/wav",
-                IfNoneMatch="*",
+        response = s3.head_object(
+            Bucket=bucket,
+            Key=key,
+        )
+
+    except ClientError as exc:
+        error_code = str(
+            exc.response.get(
+                "Error",
+                {},
+            ).get(
+                "Code",
+                "",
             )
+        )
+
+        status_code = (
+            exc.response.get(
+                "ResponseMetadata",
+                {},
+            ).get(
+                "HTTPStatusCode"
+            )
+        )
+
+        if error_code in {
+            "404",
+            "NoSuchKey",
+            "NotFound",
+        } or status_code == 404:
+            return None
+
+        raise
+
+    return {
+        str(key).lower(): str(value)
+        for key, value in response.get(
+            "Metadata",
+            {},
+        ).items()
+    }
+
+
+def _existing_output_matches_job(
+    bucket,
+    key,
+    expected_fingerprint,
+):
+
+    metadata = _get_existing_output_metadata(
+        bucket,
+        key,
+    )
+
+    if metadata is None:
+        return False
+
+    actual_fingerprint = metadata.get(
+        "pocket-job-fingerprint"
+    )
+
+    if actual_fingerprint == expected_fingerprint:
+        return True
+
+    raise RuntimeError(
+        "Output object already exists but belongs "
+        "to a different or unverifiable job: "
+        f"s3://{bucket}/{key}"
+    )
+
+def _upload_s3_file_immutable(
+    local_path,
+    bucket,
+    key,
+    job_fingerprint=None,
+):
+    """
+    Upload an object only when its key does not already exist.
+
+    For V1 generation jobs, an existing object is accepted only when
+    its stored job fingerprint matches the exact validated job. This
+    makes SQS retries idempotent without permitting accidental
+    overwrites.
+    """
+
+    put_args = {
+        "Bucket": bucket,
+        "Key": key,
+        "ContentType": "audio/wav",
+        "IfNoneMatch": "*",
+    }
+
+    if job_fingerprint is not None:
+        put_args["Metadata"] = {
+            "pocket-schema-version": "1",
+            "pocket-job-fingerprint": job_fingerprint,
+        }
+
+    try:
+        with open(local_path, "rb") as body:
+            put_args["Body"] = body
+            s3.put_object(**put_args)
+
+        return "uploaded"
 
     except ClientError as exc:
         error_code = str(
@@ -361,6 +477,17 @@ def _upload_s3_file_immutable(local_path, bucket, key):
             "PreconditionFailed",
             "412",
         } or status_code == 412:
+
+            if (
+                job_fingerprint is not None
+                and _existing_output_matches_job(
+                    bucket,
+                    key,
+                    job_fingerprint,
+                )
+            ):
+                return "existing"
+
             raise RuntimeError(
                 f"Output object already exists: "
                 f"s3://{bucket}/{key}"
@@ -432,6 +559,34 @@ def _process_job(job, require_schema_v1=False):
     )
 
     try:
+        destination = job["output"]
+        job_fingerprint = None
+
+        if job.get("schema_version") == 1:
+            job_fingerprint = _job_fingerprint(job)
+
+            if _existing_output_matches_job(
+                destination["bucket"],
+                destination["key"],
+                job_fingerprint,
+            ):
+                _log(
+                    "job_already_completed",
+                    job_id=job_id,
+                    generation_id=generation_id,
+                    output_key=destination["key"],
+                )
+
+                return {
+                    "status": "completed",
+                    "job_id": job_id,
+                    "generation_id": generation_id,
+                    "output": {
+                        "bucket": destination["bucket"],
+                        "key": destination["key"],
+                    },
+                }
+
         _log(
             "loading_narration_module",
             job_id=job_id,
@@ -502,8 +657,6 @@ def _process_job(job, require_schema_v1=False):
             output_dir=output_dir,
         )
 
-        destination = job["output"]
-
         _log(
             "upload_started",
             job_id=job_id,
@@ -511,18 +664,27 @@ def _process_job(job, require_schema_v1=False):
             output_key=destination["key"],
         )
 
-        _upload_s3_file_immutable(
+        upload_result = _upload_s3_file_immutable(
             output_path,
             destination["bucket"],
             destination["key"],
+            job_fingerprint=job_fingerprint,
         )
 
-        _log(
-            "job_completed",
-            job_id=job_id,
-            generation_id=generation_id,
-            output_key=destination["key"],
-        )
+        if upload_result == "existing":
+            _log(
+                "job_already_completed",
+                job_id=job_id,
+                generation_id=generation_id,
+                output_key=destination["key"],
+            )
+        else:
+            _log(
+                "job_completed",
+                job_id=job_id,
+                generation_id=generation_id,
+                output_key=destination["key"],
+            )
 
         return {
             "status": "completed",
