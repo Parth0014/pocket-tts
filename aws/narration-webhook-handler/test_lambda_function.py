@@ -398,9 +398,18 @@ class NarrationWebhookTests(unittest.TestCase):
             ]
         )
 
+        expected_hash = hashlib.sha256(
+            b"<p>Changed</p>"
+        ).hexdigest()
+
         self.assertEqual(
-            queued["reason"],
-            "CONTENT_CHANGED",
+            queued,
+            {
+                "schema_version": 1,
+                "post_id": "post-123",
+                "content_hash": expected_hash,
+                "reason": "CONTENT_CHANGED",
+            },
         )
 
         table.update_item.assert_called_once()
