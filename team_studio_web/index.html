@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>Narration Studio</title>
+  <link rel="stylesheet" href="/studio/styles.css">
+</head>
+<body>
+  <div class="glow glow-one"></div>
+  <div class="glow glow-two"></div>
+
+  <section id="login-view" class="login-view hidden">
+    <form id="login-form" class="login-card">
+      <div class="logo-wave" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div>
+      <p class="eyebrow">GRATEFULNESS · INTERNAL</p>
+      <h1>Narration Studio</h1>
+      <p class="subtle">A focused workspace for turning published stories into reviewed narration.</p>
+      <label>
+        <span>Dashboard code</span>
+        <input id="login-code" type="password" autocomplete="current-password" required>
+      </label>
+      <button class="button primary wide" type="submit">Enter Studio</button>
+      <p id="login-error" class="error-line"></p>
+    </form>
+  </section>
+
+  <div id="studio-shell" class="shell hidden">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="logo-wave compact" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div>
+        <div><strong>Narration</strong><span>Studio</span></div>
+      </div>
+
+      <nav>
+        <button class="nav-item active" data-view="posts"><b>◫</b><span>Ghost Posts</span></button>
+        <button class="nav-item" data-view="voices"><b>◉</b><span>Voices</span></button>
+      </nav>
+
+      <div class="sidebar-foot">
+        <div id="runtime-chip" class="runtime-chip">
+          <span class="dot paused"></span>
+          <div><strong>Processing paused</strong><small>6 × 8 GB profile ready</small></div>
+        </div>
+        <button id="logout-button" class="text-button">Sign out</button>
+      </div>
+    </aside>
+
+    <main>
+      <header class="topbar">
+        <div>
+          <p id="crumb" class="eyebrow">GHOST CONTENT</p>
+          <h2 id="page-title">Published posts</h2>
+        </div>
+        <div class="top-actions">
+          <span class="safe-chip">DEV Studio · no publishing</span>
+          <button id="refresh-button" class="icon-button" title="Refresh">↻</button>
+        </div>
+      </header>
+
+      <div id="toast" class="toast hidden"></div>
+
+      <section id="posts-view" class="view">
+        <div class="hero">
+          <div>
+            <p class="eyebrow">TEAM NARRATION WORKBENCH</p>
+            <h1>Pick a story.<br><em>Give it a voice.</em></h1>
+            <p>Published Ghost posts are normalized with the same Processor V3 path that feeds TTS.</p>
+          </div>
+          <div class="hero-status">
+            <div><span>Worker profile</span><strong>6 × 8 GB</strong></div>
+            <div><span>Processor</span><strong>V3</strong></div>
+            <div><span>Publishing</span><strong>Off</strong></div>
+          </div>
+        </div>
+
+        <div class="toolbar">
+          <div class="search">
+            <span>⌕</span>
+            <input id="post-search" placeholder="Search published posts">
+          </div>
+          <div id="post-count" class="count"></div>
+        </div>
+
+        <div id="post-grid" class="post-grid"></div>
+        <div class="pager">
+          <button id="prev-page" class="button ghost">← Previous</button>
+          <span id="page-label"></span>
+          <button id="next-page" class="button ghost">Next →</button>
+        </div>
+      </section>
+
+      <section id="voices-view" class="view hidden">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">IMMUTABLE REFERENCES</p>
+            <h1>Voice library</h1>
+            <p>Every new WAV creates a new voice identity.</p>
+          </div>
+          <button id="add-voice-button" class="button primary">+ Add voice</button>
+        </div>
+        <div id="voice-grid" class="voice-grid"></div>
+      </section>
+
+      <section id="post-view" class="view hidden">
+        <button id="back-button" class="back">← Ghost Posts</button>
+
+        <div class="post-head">
+          <div>
+            <p id="post-meta" class="eyebrow"></p>
+            <h1 id="post-title">—</h1>
+            <a id="ghost-link" target="_blank" rel="noreferrer">Open published post ↗</a>
+          </div>
+          <div id="post-runtime" class="runtime-chip large">
+            <span class="dot paused"></span>
+            <div><strong>Processing paused</strong><small>Generation execution is disabled</small></div>
+          </div>
+        </div>
+
+        <div class="workspace">
+          <section class="panel document-panel">
+            <div class="panel-head">
+              <div>
+                <p class="eyebrow">CANONICAL NARRATION</p>
+                <h3 id="document-heading">Processor V3</h3>
+              </div>
+              <div id="document-hashes" class="hashes"></div>
+            </div>
+            <article id="document-preview" class="document-preview"></article>
+          </section>
+
+          <aside class="panel composer">
+            <div class="panel-head">
+              <div>
+                <p class="eyebrow">NEW GENERATION</p>
+                <h3>Voice intent</h3>
+              </div>
+              <span class="dev-pill">DEV</span>
+            </div>
+
+            <form id="generation-form">
+              <label>
+                <span>Narrator</span>
+                <select id="narrator-select" required></select>
+              </label>
+              <label>
+                <span>Quotes</span>
+                <select id="quote-mode">
+                  <option value="preserve">Preserve — narrator voice</option>
+                  <option value="exclude">Exclude quotes</option>
+                  <option value="two_voice">Use second voice</option>
+                </select>
+              </label>
+              <label id="quote-voice-wrap" class="hidden">
+                <span>Quote voice</span>
+                <select id="quote-voice-select"></select>
+              </label>
+
+              <div id="execution-note" class="execution-note">
+                <span class="dot paused"></span>
+                <div>
+                  <strong>Execution is paused for frontend review.</strong>
+                  <p>The six-worker runtime is configured, but no jobs can be queued from this UI yet.</p>
+                </div>
+              </div>
+
+              <button id="generate-button" class="button primary wide" type="submit" disabled>
+                Processing paused
+              </button>
+            </form>
+          </aside>
+        </div>
+
+        <div class="generation-header">
+          <div>
+            <p class="eyebrow">AUDIO HISTORY</p>
+            <h3>Generations</h3>
+          </div>
+          <span id="generation-count" class="count"></span>
+        </div>
+        <div id="generation-list" class="generation-list"></div>
+      </section>
+    </main>
+  </div>
+
+  <dialog id="voice-dialog">
+    <form id="voice-form" method="dialog">
+      <div class="dialog-head">
+        <div><p class="eyebrow">NEW VOICE IDENTITY</p><h2>Add reference</h2></div>
+        <button class="dialog-close" value="cancel" formnovalidate>×</button>
+      </div>
+      <label>
+        <span>Display name</span>
+        <input id="voice-name" maxlength="160" placeholder="Preeti — warm editorial" required>
+      </label>
+      <label>
+        <span>Reference WAV</span>
+        <input id="voice-file" type="file" accept=".wav,audio/wav" required>
+        <small>WAV only · maximum 10 MB</small>
+      </label>
+      <div class="dialog-actions">
+        <button class="button ghost" value="cancel" formnovalidate>Cancel</button>
+        <button class="button primary" value="default">Create voice</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script type="module" src="/studio/app.js"></script>
+</body>
+</html>
