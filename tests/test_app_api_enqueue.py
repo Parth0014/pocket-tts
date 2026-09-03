@@ -57,6 +57,7 @@ class FakeSQS:
 class FakeDDB:
     def __init__(self):
         self.updates = []
+        self.puts = []
 
     def query(
         self,
@@ -131,6 +132,16 @@ class FakeDDB:
         raise AssertionError(
             TableName
         )
+
+    def put_item(
+        self,
+        **kwargs,
+    ):
+        self.puts.append(
+            kwargs
+        )
+
+        return {}
 
     def update_item(
         self,
@@ -264,6 +275,26 @@ def test_authenticated_enqueue_pins_sends_and_marks_queued(
     assert response["statusCode"] == 202
     assert body["generation_status"] == "QUEUED"
     assert body["already_queued"] is False
+
+    assert len(
+        fake_ddb.puts
+    ) == 1
+
+    route = fake_ddb.puts[0][
+        "Item"
+    ]
+
+    assert route[
+        "pk"
+    ][
+        "S"
+    ] == f"GEN#{GEN_ID}"
+
+    assert route[
+        "room_id"
+    ][
+        "S"
+    ] == ROOM_ID
 
     assert len(
         fake_sqs.calls

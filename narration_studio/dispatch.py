@@ -155,6 +155,147 @@ class DynamoGenerationDispatchStore:
         self._client = client
         self._table_name = table_name
 
+
+    def ensure_route(
+        self,
+        *,
+        room_id: str,
+        generation_id: str,
+        created_at: str,
+    ) -> None:
+        if not isinstance(
+            room_id,
+            str,
+        ) or not room_id.startswith(
+            "room_"
+        ):
+            raise StudioContractError(
+                "room_id is invalid"
+            )
+
+        if not isinstance(
+            generation_id,
+            str,
+        ) or not generation_id.startswith(
+            "gen_"
+        ):
+            raise StudioContractError(
+                "generation_id is invalid"
+            )
+
+        if not isinstance(
+            created_at,
+            str,
+        ) or not created_at.endswith(
+            "Z"
+        ):
+            raise StudioContractError(
+                "created_at must be UTC RFC3339 Z"
+            )
+
+        item = {
+            "pk": {
+                "S": f"GEN#{generation_id}"
+            },
+            "sk": {
+                "S": "ROUTE"
+            },
+            "entity_type": {
+                "S": "generation_route"
+            },
+            "schema_version": {
+                "N": "1"
+            },
+            "generation_id": {
+                "S": generation_id
+            },
+            "room_id": {
+                "S": room_id
+            },
+            "created_at": {
+                "S": created_at
+            },
+            "updated_at": {
+                "S": created_at
+            },
+        }
+
+        try:
+            self._client.put_item(
+                TableName=self._table_name,
+                Item=item,
+                ConditionExpression=(
+                    "attribute_not_exists(pk)"
+                ),
+            )
+
+            return
+
+        except Exception as exc:
+            if not _conditional_failure(
+                exc
+            ):
+                raise StudioDispatchError(
+                    "generation route create failed"
+                ) from exc
+
+        try:
+            response = self._client.get_item(
+                TableName=self._table_name,
+                Key={
+                    "pk": {
+                        "S": f"GEN#{generation_id}"
+                    },
+                    "sk": {
+                        "S": "ROUTE"
+                    },
+                },
+                ConsistentRead=True,
+            )
+
+        except Exception as exc:
+            raise StudioDispatchError(
+                "generation route verification failed"
+            ) from exc
+
+        existing = response.get(
+            "Item"
+        )
+
+        try:
+            existing_generation_id = (
+                existing[
+                    "generation_id"
+                ][
+                    "S"
+                ]
+            )
+            existing_room_id = (
+                existing[
+                    "room_id"
+                ][
+                    "S"
+                ]
+            )
+
+        except (
+            KeyError,
+            TypeError,
+        ):
+            raise StudioDispatchConflictError(
+                "generation route conflicts with an existing item"
+            ) from None
+
+        if (
+            existing_generation_id
+            != generation_id
+            or existing_room_id
+            != room_id
+        ):
+            raise StudioDispatchConflictError(
+                "generation route points to a different room"
+            )
+
     def pin(self, *, room_id: str, job, pinned_at: str) -> PinnedWorkerJob:
         if not isinstance(room_id, str) or not room_id.startswith("room_"):
             raise StudioContractError("room_id is invalid")

@@ -507,6 +507,29 @@ def _enqueue_generation(
         table_name=APP_TABLE,
     )
 
+    try:
+        store.ensure_route(
+            room_id=room_id,
+            generation_id=generation_id,
+            created_at=_utc_now(),
+        )
+    except StudioDispatchConflictError:
+        return _response(
+            409,
+            {
+                "ok": False,
+                "error": "generation route conflict",
+            },
+        )
+    except StudioDispatchError:
+        return _response(
+            503,
+            {
+                "ok": False,
+                "error": "generation route write failed",
+            },
+        )
+
     pinned = store.get(
         room_id=room_id,
         generation_id=generation_id,

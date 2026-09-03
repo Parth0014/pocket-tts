@@ -67,3 +67,59 @@ App API receives only `sqs:SendMessage` to the exact Studio FIFO.
 It receives no production S3 write permission.
 
 The Worker event-source mapping remains disabled during the controlled transport test.
+
+## Worker V2 status feedback
+
+Worker execution feedback uses a separate DEV FIFO and updater Lambda.
+
+Worker status transport:
+
+- queue: `pocket-tts-dev-status-queue.fifo`
+- producer: `pocket-tts-dev`
+- consumer: `pocket-tts-dev-status-updater`
+- `MessageGroupId = generation_id`
+- `MessageDeduplicationId = SHA-256(canonical status event)`
+
+The worker never writes `pocket-tts-app` directly.
+
+Before enqueue, App API creates an immutable routing item:
+
+- pk = `GEN#<generation_id>`
+- sk = `ROUTE`
+- room_id = the owning room
+- generation_id = the immutable generation identity
+
+The updater resolves that route and conditionally updates the authoritative
+generation item only when `generation_id`, `job_id`, and
+`worker_job_fingerprint` match the pinned dispatch.
+
+Status events are exact V1 objects.
+
+RUNNING carries:
+
+- schema_version
+- generation_id
+- job_id
+- job_fingerprint
+- status = RUNNING
+- attempt
+- occurred_at
+
+COMPLETED additionally carries exact DEV output bucket/key and output SHA-256.
+
+FAILED additionally carries a bounded machine-readable error_code.
+
+The updater does not modify `review_status`.
+
+Retry semantics:
+
+- RUNNING may be applied repeatedly for the same pinned job.
+- Intermediate worker failures keep execution state RUNNING so SQS can retry.
+- FAILED is emitted only on the final configured worker receive attempt.
+- If output was committed but COMPLETED feedback fails, the worker retry
+  detects the matching immutable output and republishes COMPLETED without
+  running TTS again.
+- COMPLETED is idempotent for the same pinned job and output.
+
+The worker event-source mapping remains disabled except during a controlled
+Studio E2E proof until a later activation decision.

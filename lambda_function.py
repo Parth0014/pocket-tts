@@ -3,15 +3,20 @@ import json
 import os
 import shutil
 import tempfile
+from datetime import datetime, timezone
 from pathlib import Path
 
 import boto3
 from botocore.exceptions import ClientError
 
 s3 = boto3.client("s3")
+status_sqs = boto3.client("sqs")
 
 
 DEV_BUCKET = "pocket-tts-dev-test"
+STATUS_QUEUE_URL = os.environ.get(
+    "STUDIO_STATUS_QUEUE_URL"
+)
 
 VALID_QUOTE_MODES = {
     "preserve",
@@ -555,6 +560,234 @@ def _job_fingerprint(job):
     ).hexdigest()
 
 
+def _utc_now():
+    return (
+        datetime.now(timezone.utc)
+        .isoformat(timespec="seconds")
+        .replace("+00:00", "Z")
+    )
+
+
+def _status_max_receive_count():
+    raw = os.environ.get(
+        "STUDIO_MAX_RECEIVE_COUNT",
+        "3",
+    )
+
+    try:
+        value = int(raw)
+    except ValueError:
+        raise RuntimeError(
+            "STUDIO_MAX_RECEIVE_COUNT must be an integer"
+        ) from None
+
+    if value < 1:
+        raise RuntimeError(
+            "STUDIO_MAX_RECEIVE_COUNT must be positive"
+        )
+
+    return value
+
+
+def _sha256_file(path):
+    digest = hashlib.sha256()
+
+    with open(path, "rb") as handle:
+        for chunk in iter(
+            lambda: handle.read(1024 * 1024),
+            b"",
+        ):
+            digest.update(chunk)
+
+    return digest.hexdigest()
+
+
+def _build_status_event(
+    *,
+    job,
+    job_fingerprint,
+    status,
+    attempt,
+    occurred_at,
+    output_sha256=None,
+    error_code=None,
+):
+    if job.get("schema_version") != 1:
+        raise ValueError(
+            "status events require schema_version 1"
+        )
+
+    generation_id = job["generation_id"]
+    job_id = job["job_id"]
+
+    if not (
+        isinstance(generation_id, str)
+        and generation_id.startswith("gen_")
+        and len(generation_id) == 36
+        and all(
+            char in "0123456789abcdef"
+            for char in generation_id[4:]
+        )
+    ):
+        raise ValueError(
+            "status generation_id must use canonical Studio format"
+        )
+
+    if not (
+        isinstance(job_id, str)
+        and job_id.startswith("job_")
+        and len(job_id) == 36
+        and all(
+            char in "0123456789abcdef"
+            for char in job_id[4:]
+        )
+    ):
+        raise ValueError(
+            "status job_id must use canonical Studio format"
+        )
+
+    if not (
+        isinstance(job_fingerprint, str)
+        and len(job_fingerprint) == 64
+        and all(
+            char in "0123456789abcdef"
+            for char in job_fingerprint
+        )
+    ):
+        raise ValueError(
+            "status job_fingerprint must be lowercase SHA-256"
+        )
+
+    if (
+        isinstance(attempt, bool)
+        or not isinstance(attempt, int)
+        or attempt < 1
+    ):
+        raise ValueError(
+            "status attempt must be positive"
+        )
+
+    if status not in {
+        "RUNNING",
+        "COMPLETED",
+        "FAILED",
+    }:
+        raise ValueError(
+            "unsupported generation status event"
+        )
+
+    event = {
+        "schema_version": 1,
+        "generation_id": generation_id,
+        "job_id": job_id,
+        "job_fingerprint": job_fingerprint,
+        "status": status,
+        "attempt": attempt,
+        "occurred_at": occurred_at,
+    }
+
+    if status == "COMPLETED":
+        if not (
+            isinstance(output_sha256, str)
+            and len(output_sha256) == 64
+            and all(
+                char in "0123456789abcdef"
+                for char in output_sha256
+            )
+        ):
+            raise ValueError(
+                "COMPLETED status requires output SHA-256"
+            )
+
+        event["output"] = {
+            "bucket": job["output"]["bucket"],
+            "key": job["output"]["key"],
+            "sha256": output_sha256,
+        }
+
+    elif output_sha256 is not None:
+        raise ValueError(
+            "output SHA-256 is only valid for COMPLETED"
+        )
+
+    if status == "FAILED":
+        if not (
+            isinstance(error_code, str)
+            and error_code
+            and len(error_code) <= 64
+            and all(
+                char in (
+                    "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+                    "0123456789_"
+                )
+                for char in error_code
+            )
+        ):
+            raise ValueError(
+                "FAILED status requires a safe error code"
+            )
+
+        event["error_code"] = error_code
+
+    elif error_code is not None:
+        raise ValueError(
+            "error_code is only valid for FAILED"
+        )
+
+    return event
+
+
+def _publish_generation_status(
+    *,
+    job,
+    job_fingerprint,
+    status,
+    attempt,
+    output_sha256=None,
+    error_code=None,
+):
+    if not STATUS_QUEUE_URL:
+        raise RuntimeError(
+            "STUDIO_STATUS_QUEUE_URL is not configured"
+        )
+
+    event = _build_status_event(
+        job=job,
+        job_fingerprint=job_fingerprint,
+        status=status,
+        attempt=attempt,
+        occurred_at=_utc_now(),
+        output_sha256=output_sha256,
+        error_code=error_code,
+    )
+
+    body = json.dumps(
+        event,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+    )
+
+    dedupe_id = hashlib.sha256(
+        body.encode("utf-8")
+    ).hexdigest()
+
+    status_sqs.send_message(
+        QueueUrl=STATUS_QUEUE_URL,
+        MessageBody=body,
+        MessageGroupId=job["generation_id"],
+        MessageDeduplicationId=dedupe_id,
+    )
+
+    _log(
+        "generation_status_published",
+        job_id=job["job_id"],
+        generation_id=job["generation_id"],
+        generation_status=status,
+        attempt=attempt,
+    )
+
+
 def _get_existing_output_metadata(bucket, key):
     """
     Return S3 user metadata when an output object exists.
@@ -639,6 +872,9 @@ def _upload_s3_file_immutable(
     bucket,
     key,
     job_fingerprint=None,
+    output_sha256=None,
+    job_id=None,
+    generation_id=None,
 ):
     """
     Upload an object only when its key does not already exist.
@@ -657,10 +893,27 @@ def _upload_s3_file_immutable(
     }
 
     if job_fingerprint is not None:
-        put_args["Metadata"] = {
+        metadata = {
             "pocket-schema-version": "1",
             "pocket-job-fingerprint": job_fingerprint,
         }
+
+        if output_sha256 is not None:
+            metadata[
+                "pocket-output-sha256"
+            ] = output_sha256
+
+        if job_id is not None:
+            metadata[
+                "pocket-job-id"
+            ] = job_id
+
+        if generation_id is not None:
+            metadata[
+                "pocket-generation-id"
+            ] = generation_id
+
+        put_args["Metadata"] = metadata
 
     try:
         with open(local_path, "rb") as body:
@@ -712,7 +965,13 @@ def _upload_s3_file_immutable(
         raise
 
 
-def _process_job(job, require_schema_v1=False):
+def _process_job(
+    job,
+    require_schema_v1=False,
+    status_feedback=False,
+    receive_count=1,
+    max_receive_count=3,
+):
     raw_job = job
 
     try:
@@ -772,11 +1031,14 @@ def _process_job(job, require_schema_v1=False):
             "legacy",
         ),
         quote_mode=job["quote_mode"],
+        receive_count=receive_count,
     )
+
+    job_fingerprint = None
+    output_committed = False
 
     try:
         destination = job["output"]
-        job_fingerprint = None
 
         if job.get("schema_version") == 1:
             job_fingerprint = _job_fingerprint(job)
@@ -786,6 +1048,46 @@ def _process_job(job, require_schema_v1=False):
                 destination["key"],
                 job_fingerprint,
             ):
+                metadata = _get_existing_output_metadata(
+                    destination["bucket"],
+                    destination["key"],
+                )
+
+                output_sha256 = (
+                    metadata or {}
+                ).get(
+                    "pocket-output-sha256"
+                )
+
+                if status_feedback:
+                    if not (
+                        isinstance(
+                            output_sha256,
+                            str,
+                        )
+                        and len(
+                            output_sha256
+                        )
+                        == 64
+                        and all(
+                            char
+                            in "0123456789abcdef"
+                            for char
+                            in output_sha256
+                        )
+                    ):
+                        raise RuntimeError(
+                            "Existing Studio output is missing its SHA-256 metadata"
+                        )
+
+                    _publish_generation_status(
+                        job=job,
+                        job_fingerprint=job_fingerprint,
+                        status="COMPLETED",
+                        attempt=receive_count,
+                        output_sha256=output_sha256,
+                    )
+
                 _log(
                     "job_already_completed",
                     job_id=job_id,
@@ -802,6 +1104,14 @@ def _process_job(job, require_schema_v1=False):
                         "key": destination["key"],
                     },
                 }
+
+            if status_feedback:
+                _publish_generation_status(
+                    job=job,
+                    job_fingerprint=job_fingerprint,
+                    status="RUNNING",
+                    attempt=receive_count,
+                )
 
         _log(
             "loading_narration_module",
@@ -873,6 +1183,10 @@ def _process_job(job, require_schema_v1=False):
             output_dir=output_dir,
         )
 
+        output_sha256 = _sha256_file(
+            output_path
+        )
+
         _log(
             "upload_started",
             job_id=job_id,
@@ -885,7 +1199,33 @@ def _process_job(job, require_schema_v1=False):
             destination["bucket"],
             destination["key"],
             job_fingerprint=job_fingerprint,
+            output_sha256=(
+                output_sha256
+                if job_fingerprint is not None
+                else None
+            ),
+            job_id=(
+                job_id
+                if job_fingerprint is not None
+                else None
+            ),
+            generation_id=(
+                generation_id
+                if job_fingerprint is not None
+                else None
+            ),
         )
+
+        output_committed = True
+
+        if status_feedback:
+            _publish_generation_status(
+                job=job,
+                job_fingerprint=job_fingerprint,
+                status="COMPLETED",
+                attempt=receive_count,
+                output_sha256=output_sha256,
+            )
 
         if upload_result == "existing":
             _log(
@@ -919,7 +1259,34 @@ def _process_job(job, require_schema_v1=False):
             generation_id=generation_id,
             error_type=type(exc).__name__,
             error=str(exc),
+            receive_count=receive_count,
         )
+
+        if (
+            status_feedback
+            and job_fingerprint is not None
+            and not output_committed
+            and receive_count >= max_receive_count
+        ):
+            try:
+                _publish_generation_status(
+                    job=job,
+                    job_fingerprint=job_fingerprint,
+                    status="FAILED",
+                    attempt=receive_count,
+                    error_code=(
+                        "WORKER_FINAL_ATTEMPT_FAILED"
+                    ),
+                )
+
+            except Exception as status_exc:
+                _log(
+                    "generation_status_publish_failed",
+                    job_id=job_id,
+                    generation_id=generation_id,
+                    generation_status="FAILED",
+                    error_type=type(status_exc).__name__,
+                )
 
         raise
 
@@ -937,8 +1304,8 @@ def lambda_handler(event, context):
     1. Direct Lambda invocation.
        Legacy direct test jobs remain supported.
 
-    2. Future SQS jobs.
-       SQS requires schema_version == 1.
+    2. Studio SQS jobs.
+       SQS requires schema_version == 1 and publishes execution status.
     """
 
     records = event.get("Records")
@@ -948,16 +1315,47 @@ def lambda_handler(event, context):
         for record in records
     ):
         results = []
+        max_receive_count = (
+            _status_max_receive_count()
+        )
 
         for record in records:
             body = json.loads(
                 record["body"]
             )
 
+            attributes = record.get(
+                "attributes",
+                {},
+            )
+
+            try:
+                receive_count = int(
+                    attributes.get(
+                        "ApproximateReceiveCount",
+                        "1",
+                    )
+                )
+            except (
+                TypeError,
+                ValueError,
+            ):
+                raise ValueError(
+                    "Invalid SQS ApproximateReceiveCount"
+                ) from None
+
+            if receive_count < 1:
+                raise ValueError(
+                    "SQS ApproximateReceiveCount must be positive"
+                )
+
             results.append(
                 _process_job(
                     body,
                     require_schema_v1=True,
+                    status_feedback=True,
+                    receive_count=receive_count,
+                    max_receive_count=max_receive_count,
                 )
             )
 
@@ -969,4 +1367,5 @@ def lambda_handler(event, context):
     return _process_job(
         event,
         require_schema_v1=False,
+        status_feedback=False,
     )
