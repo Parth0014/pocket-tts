@@ -32,8 +32,8 @@ import torch
 from pocket_tts import TTSModel, export_model_state
 
 from chunking import build_chunks_from_blocks, generation_settings_for
-from extractor import extract_blocks
 from narration_script import build_narration_blocks
+from worker_document import extract_worker_blocks
 
 # ============================================================
 # 1. PATHS + RUNTIME CONFIGURATION  (LOCAL TEST ONLY)
@@ -861,7 +861,7 @@ def run_pipeline(
     if not post_html:
         raise ValueError("Post HTML file is empty.")
 
-    extracted_blocks = extract_blocks(post_html)
+    extracted_blocks = extract_worker_blocks(post_html)
     if not extracted_blocks:
         raise ValueError(
             "Extraction produced zero narration blocks. Check that the input is "

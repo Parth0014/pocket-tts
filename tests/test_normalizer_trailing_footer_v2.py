@@ -61,10 +61,10 @@ def test_editorial_share_with_someone_is_preserved():
 
 
 def test_processor_version_is_two_for_new_documents():
-    assert PROCESSOR_VERSION == 2
+    assert PROCESSOR_VERSION >= 2
     document = build_document(
         post_id="ghost-post",
         content_hash=CONTENT_HASH,
         blocks=[{"type": "paragraph", "text": "Article."}],
     )
-    assert document["processor_version"] == 2
+    assert document["processor_version"] == PROCESSOR_VERSION

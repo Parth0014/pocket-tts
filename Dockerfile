@@ -18,5 +18,7 @@ COPY lambda_function.py .
 COPY extractor.py .
 COPY narration_script.py .
 COPY chunking.py .
+COPY worker_document.py .
+COPY narration_content ./narration_content
 
 CMD ["lambda_function.lambda_handler"]

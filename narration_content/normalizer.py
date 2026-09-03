@@ -103,9 +103,39 @@ _CTA_PREFIXES = (
 )
 
 
+_EMOJI_RANGES = (
+    (0x2600, 0x27BF),
+    (0x1F1E6, 0x1F1FF),
+    (0x1F300, 0x1FAFF),
+)
+
+_EMOJI_SEQUENCE_CODEPOINTS = frozenset(
+    {0x200D, 0x20E3, 0xFE0E, 0xFE0F}
+)
+
+
+def _is_narration_emoji(char: str) -> bool:
+    codepoint = ord(char)
+    if codepoint in _EMOJI_SEQUENCE_CODEPOINTS:
+        return True
+    if 0x1F3FB <= codepoint <= 0x1F3FF:
+        return True
+    if 0xE0020 <= codepoint <= 0xE007F:
+        return True
+    return any(start <= codepoint <= end for start, end in _EMOJI_RANGES)
+
+
+def _strip_narration_emoji(value: str) -> str:
+    # Replace rather than concatenate across an emoji boundary: hi🤍there -> hi there.
+    return "".join(
+        " " if _is_narration_emoji(char) else char
+        for char in value
+    )
+
+
 def _normalize_text(value: str) -> str:
-    """Collapse insignificant whitespace in one canonical text string."""
-    return re.sub(r"\s+", " ", value).strip()
+    """Remove decorative emoji and collapse insignificant whitespace."""
+    return re.sub(r"\s+", " ", _strip_narration_emoji(value)).strip()
 
 
 def _classes(tag: Tag) -> set[str]:

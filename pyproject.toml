@@ -28,7 +28,8 @@ dev = [
 pocket-tts-narrate = "generate_narration:main"
 
 [tool.setuptools]
-py-modules = ["chunking", "extractor", "generate_narration", "narration_script"]
+py-modules = ["chunking", "extractor", "generate_narration", "narration_script", "worker_document"]
+packages = ["narration_content"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
