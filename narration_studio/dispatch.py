@@ -6,7 +6,7 @@ import hashlib
 import json
 from dataclasses import dataclass
 
-from .core import PreparedArtifact
+from .artifacts import PreparedArtifact
 from .models import StudioContractError
 from .worker_contract import (
     DEV_BUCKET,
@@ -298,6 +298,59 @@ class DynamoGenerationDispatchStore:
         except (KeyError, TypeError, StudioContractError) as exc:
             raise StudioDispatchError(
                 "pinned generation dispatch is malformed"
+            ) from exc
+
+    def mark_queued(
+        self,
+        *,
+        room_id: str,
+        pinned: PinnedWorkerJob,
+        queued_at: str,
+    ) -> None:
+        if not isinstance(queued_at, str) or not queued_at.endswith("Z"):
+            raise StudioContractError(
+                "queued_at must be UTC RFC3339 Z"
+            )
+
+        try:
+            self._client.update_item(
+                TableName=self._table_name,
+                Key={
+                    "pk": {"S": f"ROOM#{room_id}"},
+                    "sk": {"S": f"GEN#{pinned.generation_id}"},
+                },
+                ConditionExpression=(
+                    "#generation_id = :generation_id "
+                    "AND #worker_job_fingerprint = :fingerprint "
+                    "AND (attribute_not_exists(#generation_status) "
+                    "OR #generation_status = :queued)"
+                ),
+                UpdateExpression=(
+                    "SET #generation_status = :queued, "
+                    "#queued_at = if_not_exists(#queued_at, :queued_at), "
+                    "#updated_at = :queued_at"
+                ),
+                ExpressionAttributeNames={
+                    "#generation_id": "generation_id",
+                    "#worker_job_fingerprint": "worker_job_fingerprint",
+                    "#generation_status": "generation_status",
+                    "#queued_at": "queued_at",
+                    "#updated_at": "updated_at",
+                },
+                ExpressionAttributeValues={
+                    ":generation_id": {"S": pinned.generation_id},
+                    ":fingerprint": {"S": pinned.fingerprint},
+                    ":queued": {"S": "QUEUED"},
+                    ":queued_at": {"S": queued_at},
+                },
+            )
+        except Exception as exc:
+            if _conditional_failure(exc):
+                raise StudioDispatchConflictError(
+                    "generation cannot transition to QUEUED"
+                ) from exc
+            raise StudioDispatchError(
+                "generation QUEUED transition failed"
             ) from exc
 
 

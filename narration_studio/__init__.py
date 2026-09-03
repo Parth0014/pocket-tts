@@ -12,9 +12,16 @@ from typing import Any
 
 _EXPORTS = {
     "ArtifactRef": ("narration_studio.models", "ArtifactRef"),
+    "GenerationExecutionStatus": (
+        "narration_studio.models",
+        "GenerationExecutionStatus",
+    ),
     "GenerationRecord": ("narration_studio.models", "GenerationRecord"),
-    "GenerationStatus": ("narration_studio.models", "GenerationStatus"),
-    "PreparedArtifact": ("narration_studio.core", "PreparedArtifact"),
+    "GenerationReviewStatus": (
+        "narration_studio.models",
+        "GenerationReviewStatus",
+    ),
+    "PreparedArtifact": ("narration_studio.artifacts", "PreparedArtifact"),
     "PreparedGeneration": ("narration_studio.core", "PreparedGeneration"),
     "PreparedStudioRevision": ("narration_studio.core", "PreparedStudioRevision"),
     "PreparedVoiceReference": ("narration_studio.core", "PreparedVoiceReference"),

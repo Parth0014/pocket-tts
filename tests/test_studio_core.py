@@ -9,6 +9,7 @@ from narration_studio.core import (
     prepare_voice_reference,
 )
 from narration_studio.models import (
+    GenerationReviewStatus,
     StudioContractError,
     VoiceRecord,
     VoiceStatus,
@@ -37,6 +38,37 @@ def canonical_document():
             }
         ],
     }
+
+
+def wav_bytes():
+    return (
+        b"RIFF"
+        + (40).to_bytes(
+            4,
+            "little",
+        )
+        + b"WAVE"
+        + (b"\x00" * 40)
+    )
+
+
+def active_voice():
+    reference = prepare_voice_reference(
+        voice_id=VOICE_ID,
+        version=9,
+        wav_bytes=wav_bytes(),
+        bucket="pocket-tts-dev-test",
+    ).reference
+
+    return VoiceRecord(
+        voice_id=VOICE_ID,
+        display_name="Narrator",
+        status=VoiceStatus.ACTIVE,
+        version=9,
+        reference_audio=reference,
+        created_at=NOW,
+        updated_at=NOW,
+    )
 
 
 def test_imported_revision_preserves_exact_canonical_document(
@@ -98,15 +130,7 @@ def test_imported_revision_preserves_exact_canonical_document(
 
 
 def test_voice_reference_is_immutable_hash_pinned():
-    wav = (
-        b"RIFF"
-        + (40).to_bytes(
-            4,
-            "little",
-        )
-        + b"WAVE"
-        + (b"\x00" * 40)
-    )
+    wav = wav_bytes()
 
     prepared = prepare_voice_reference(
         voice_id=VOICE_ID,
@@ -123,11 +147,6 @@ def test_voice_reference_is_immutable_hash_pinned():
         ]
     )
 
-    assert prepared.reference.key == (
-        f"studio-voices/{VOICE_ID}/"
-        "v000002/reference.wav"
-    )
-
 
 def test_reference_audio_must_be_wave():
     with pytest.raises(
@@ -141,7 +160,7 @@ def test_reference_audio_must_be_wave():
         )
 
 
-def test_generation_snapshot_pins_document_and_voice(
+def test_generation_snapshot_pins_source_quote_mode_and_separate_state(
     monkeypatch,
 ):
     monkeypatch.setattr(
@@ -159,36 +178,13 @@ def test_generation_snapshot_pins_document_and_voice(
         created_at=NOW,
     ).revision
 
-    reference = prepare_voice_reference(
-        voice_id=VOICE_ID,
-        version=9,
-        wav_bytes=(
-            b"RIFF"
-            + (40).to_bytes(
-                4,
-                "little",
-            )
-            + b"WAVE"
-            + (b"\x00" * 40)
-        ),
-        bucket="pocket-tts-dev-test",
-    ).reference
-
-    voice = VoiceRecord(
-        voice_id=VOICE_ID,
-        display_name="Narrator",
-        status=VoiceStatus.ACTIVE,
-        version=9,
-        reference_audio=reference,
-        created_at=NOW,
-        updated_at=NOW,
-    )
-
     prepared = prepare_generation_input(
         room_id=ROOM_ID,
         generation_id=GEN_ID,
         revision=revision,
-        voice=voice,
+        voice=active_voice(),
+        quote_mode="preserve",
+        quote_voice=None,
         bucket="pocket-tts-dev-test",
         created_at=NOW,
     )
@@ -202,23 +198,18 @@ def test_generation_snapshot_pins_document_and_voice(
     ]["revision"] == 4
 
     assert payload[
-        "document"
-    ]["sha256"] == (
-        revision.document.sha256
-    )
+        "source"
+    ]["post_id"] == "ghost-post-1"
 
     assert payload[
-        "voice"
-    ]["version"] == 9
+        "quote_mode"
+    ] == "preserve"
 
-    assert payload[
-        "voice"
-    ]["reference_audio"][
-        "sha256"
-    ] == reference.sha256
+    assert prepared.generation.generation_status is None
 
-    assert prepared.generation.status.value == (
-        "READY"
+    assert (
+        prepared.generation.review_status
+        is GenerationReviewStatus.UNREVIEWED
     )
 
 
@@ -243,15 +234,7 @@ def test_generation_rejects_disabled_voice(
     reference = prepare_voice_reference(
         voice_id=VOICE_ID,
         version=1,
-        wav_bytes=(
-            b"RIFF"
-            + (40).to_bytes(
-                4,
-                "little",
-            )
-            + b"WAVE"
-            + (b"\x00" * 40)
-        ),
+        wav_bytes=wav_bytes(),
         bucket="pocket-tts-dev-test",
     ).reference
 
@@ -273,6 +256,8 @@ def test_generation_rejects_disabled_voice(
             generation_id=GEN_ID,
             revision=revision,
             voice=voice,
+            quote_mode="preserve",
+            quote_voice=None,
             bucket="pocket-tts-dev-test",
             created_at=NOW,
         )

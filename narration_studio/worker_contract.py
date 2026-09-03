@@ -9,7 +9,7 @@ import uuid
 from collections.abc import Mapping
 from typing import Any
 
-from .core import PreparedArtifact
+from .artifacts import PreparedArtifact
 from .models import StudioContractError
 
 DEV_BUCKET = "pocket-tts-dev-test"
@@ -240,6 +240,14 @@ def build_worker_job_for_generation(
         None,
     ):
         raise StudioContractError("generation document SHA-256 mismatch")
+
+    if getattr(generation, "quote_mode", quote_mode) != quote_mode:
+        raise StudioContractError("generation quote_mode mismatch")
+
+    if getattr(generation, "quote_voice_id", None) != quote_voice_id:
+        raise StudioContractError(
+            "generation quote voice mismatch"
+        )
 
     return build_worker_job_v1(
         job_id=job_id,

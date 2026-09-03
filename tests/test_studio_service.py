@@ -235,7 +235,7 @@ def test_reference_artifact_precedes_voice_registry():
     ]
 
 
-def test_generation_artifact_precedes_ready_record(
+def test_generation_artifact_precedes_generation_record(
     monkeypatch,
 ):
     events = []
@@ -276,6 +276,8 @@ def test_generation_artifact_precedes_ready_record(
         generation_id=GEN_ID,
         revision=revision,
         voice=voice,
+        quote_mode="preserve",
+        quote_voice=None,
         created_at=NOW,
     )
 
@@ -335,6 +337,8 @@ def test_disabled_voice_fails_before_generation_storage(
             generation_id=GEN_ID,
             revision=revision,
             voice=voice,
+            quote_mode="preserve",
+            quote_voice=None,
             created_at=NOW,
         )
 

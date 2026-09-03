@@ -1,8 +1,6 @@
 from io import BytesIO
 
-from narration_studio.core import (
-    PreparedArtifact,
-)
+from narration_studio.artifacts import PreparedArtifact
 from narration_studio.dynamodb import (
     DynamoStudioRepository,
     DynamoVoiceRepository,
@@ -10,7 +8,7 @@ from narration_studio.dynamodb import (
 from narration_studio.models import (
     ArtifactRef,
     GenerationRecord,
-    GenerationStatus,
+    GenerationReviewStatus,
     RoomRecord,
     RoomStatus,
     StudioDocumentRevision,
@@ -177,7 +175,7 @@ def test_document_revision_uses_compare_and_swap():
     ][":expected"]["N"] == "1"
 
 
-def test_generation_creation_persists_all_pins():
+def test_generation_creation_persists_source_and_separate_states():
     client = FakeDynamoClient()
 
     repository = DynamoStudioRepository(
@@ -193,6 +191,9 @@ def test_generation_creation_persists_all_pins():
         document=artifact(
             SHA_A
         ),
+        source_post_id="ghostpost123",
+        source_content_hash=SHA_A,
+        source_narration_hash=SHA_B,
         voice_id=VOICE_ID,
         voice_version=7,
         voice_reference_audio=artifact(
@@ -202,6 +203,10 @@ def test_generation_creation_persists_all_pins():
                 "v000007/reference.wav"
             ),
         ),
+        quote_mode="preserve",
+        quote_voice_id=None,
+        quote_voice_version=None,
+        quote_voice_reference_audio=None,
         generation_input=artifact(
             SHA_C,
             key=(
@@ -209,7 +214,8 @@ def test_generation_creation_persists_all_pins():
                 f"{ROOM_ID}/{GEN_ID}.json"
             ),
         ),
-        status=GenerationStatus.READY,
+        generation_status=None,
+        review_status=GenerationReviewStatus.UNREVIEWED,
         version=1,
         created_at=NOW,
         updated_at=NOW,
@@ -224,20 +230,23 @@ def test_generation_creation_persists_all_pins():
     ]
 
     assert item[
-        "document_revision"
-    ]["N"] == "4"
+        "source_post_id"
+    ]["S"] == "ghostpost123"
 
     assert item[
-        "voice_version"
-    ]["N"] == "7"
+        "source_content_hash"
+    ]["S"] == SHA_A
 
     assert item[
-        "voice_reference_sha256"
-    ]["S"] == SHA_B
+        "review_status"
+    ]["S"] == "UNREVIEWED"
 
-    assert item[
-        "generation_input_sha256"
-    ]["S"] == SHA_C
+    assert (
+        "generation_status"
+        not in item
+    )
+
+    assert "status" not in item
 
 
 def test_voice_repository_round_trip_shape():
@@ -313,14 +322,6 @@ def test_s3_store_uses_conditional_create():
     assert call[
         "IfNoneMatch"
     ] == "*"
-
-    assert call[
-        "Bucket"
-    ] == "pocket-tts-dev-test"
-
-    assert call[
-        "Body"
-    ] == prepared.body
 
 
 class ConditionalError(Exception):

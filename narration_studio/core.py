@@ -9,10 +9,11 @@ from typing import Any, Mapping
 
 from narration_content.validation import validate_document
 
+from .artifacts import PreparedArtifact
 from .models import (
     ArtifactRef,
     GenerationRecord,
-    GenerationStatus,
+    GenerationReviewStatus,
     StudioContractError,
     StudioDocumentRevision,
     VoiceRecord,
@@ -20,13 +21,6 @@ from .models import (
     _require_positive_int,
     _require_prefixed_id,
 )
-
-
-@dataclass(frozen=True)
-class PreparedArtifact:
-    key: str
-    body: bytes
-    metadata: Mapping[str, str]
 
 
 @dataclass(frozen=True)
@@ -146,15 +140,9 @@ def prepare_imported_revision(
     )
 
     source_post_id = narration_document["post_id"]
-    source_content_hash = narration_document[
-        "content_hash"
-    ]
-    source_narration_hash = narration_document[
-        "narration_hash"
-    ]
-    source_processor_version = narration_document[
-        "processor_version"
-    ]
+    source_content_hash = narration_document["content_hash"]
+    source_narration_hash = narration_document["narration_hash"]
+    source_processor_version = narration_document["processor_version"]
 
     key = studio_document_key(
         room_id,
@@ -287,6 +275,8 @@ def prepare_generation_input(
     generation_id: str,
     revision: StudioDocumentRevision,
     voice: VoiceRecord,
+    quote_mode: str,
+    quote_voice: VoiceRecord | None,
     bucket: str,
     created_at: str,
 ) -> PreparedGeneration:
@@ -300,16 +290,46 @@ def prepare_generation_input(
             "generation requires an ACTIVE voice"
         )
 
+    if quote_mode not in {
+        "preserve",
+        "exclude",
+        "two_voice",
+    }:
+        raise StudioContractError(
+            "quote_mode must be preserve, exclude, or two_voice"
+        )
+
+    if quote_mode == "two_voice":
+        if quote_voice is None:
+            raise StudioContractError(
+                "two_voice requires an ACTIVE quote voice"
+            )
+
+        if quote_voice.status is not VoiceStatus.ACTIVE:
+            raise StudioContractError(
+                "two_voice requires an ACTIVE quote voice"
+            )
+
+    elif quote_voice is not None:
+        raise StudioContractError(
+            "quote_voice is forbidden unless quote_mode is two_voice"
+        )
+
     key = generation_input_key(
         room_id,
         generation_id,
     )
 
-    payload = {
+    payload: dict[str, Any] = {
         "schema_version": 1,
         "kind": "STUDIO_GENERATION_INPUT",
         "generation_id": generation_id,
         "room_id": room_id,
+        "source": {
+            "post_id": revision.source_post_id,
+            "content_hash": revision.source_content_hash,
+            "narration_hash": revision.source_narration_hash,
+        },
         "document": {
             "doc_id": revision.doc_id,
             "revision": revision.revision,
@@ -327,8 +347,21 @@ def prepare_generation_input(
                 "sha256": voice.reference_audio.sha256,
             },
         },
+        "quote_mode": quote_mode,
         "created_at": created_at,
     }
+
+    if quote_voice is not None:
+        payload["quote_voice"] = {
+            "voice_id": quote_voice.voice_id,
+            "version": quote_voice.version,
+            "display_name": quote_voice.display_name,
+            "reference_audio": {
+                "bucket": quote_voice.reference_audio.bucket,
+                "key": quote_voice.reference_audio.key,
+                "sha256": quote_voice.reference_audio.sha256,
+            },
+        }
 
     body = canonical_json_bytes(
         payload
@@ -350,31 +383,61 @@ def prepare_generation_input(
         doc_id=revision.doc_id,
         document_revision=revision.revision,
         document=revision.document,
+        source_post_id=revision.source_post_id,
+        source_content_hash=revision.source_content_hash,
+        source_narration_hash=revision.source_narration_hash,
         voice_id=voice.voice_id,
         voice_version=voice.version,
         voice_reference_audio=voice.reference_audio,
+        quote_mode=quote_mode,
+        quote_voice_id=(
+            quote_voice.voice_id
+            if quote_voice is not None
+            else None
+        ),
+        quote_voice_version=(
+            quote_voice.version
+            if quote_voice is not None
+            else None
+        ),
+        quote_voice_reference_audio=(
+            quote_voice.reference_audio
+            if quote_voice is not None
+            else None
+        ),
         generation_input=input_reference,
-        status=GenerationStatus.READY,
+        generation_status=None,
+        review_status=GenerationReviewStatus.UNREVIEWED,
         version=1,
         created_at=created_at,
         updated_at=created_at,
     )
 
+    metadata = {
+        "artifact-kind": "studio-generation-input-v1",
+        "room-id": room_id,
+        "generation-id": generation_id,
+        "document-sha256": revision.document.sha256,
+        "voice-id": voice.voice_id,
+        "voice-version": str(voice.version),
+        "voice-reference-sha256": voice.reference_audio.sha256,
+        "quote-mode": quote_mode,
+        "sha256": digest,
+    }
+
+    if quote_voice is not None:
+        metadata["quote-voice-id"] = quote_voice.voice_id
+        metadata["quote-voice-version"] = str(
+            quote_voice.version
+        )
+        metadata["quote-voice-reference-sha256"] = (
+            quote_voice.reference_audio.sha256
+        )
+
     artifact = PreparedArtifact(
         key=key,
         body=body,
-        metadata={
-            "artifact-kind": "studio-generation-input-v1",
-            "room-id": room_id,
-            "generation-id": generation_id,
-            "document-sha256": revision.document.sha256,
-            "voice-id": voice.voice_id,
-            "voice-version": str(voice.version),
-            "voice-reference-sha256": (
-                voice.reference_audio.sha256
-            ),
-            "sha256": digest,
-        },
+        metadata=metadata,
     )
 
     return PreparedGeneration(

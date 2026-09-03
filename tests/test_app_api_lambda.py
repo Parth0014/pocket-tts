@@ -43,6 +43,19 @@ class FakeDDB:
             "Items": []
         }
 
+    def get_item(self, **kwargs):
+        return {}
+
+
+class FakeSQS:
+    def send_message(
+        self,
+        **kwargs,
+    ):
+        return {
+            "MessageId": "message-1"
+        }
+
 
 def load_module(
     monkeypatch,
@@ -67,24 +80,27 @@ def load_module(
         "SESSION_SIGNING_SECRET_PARAMETER",
         "/session",
     )
+    monkeypatch.setenv(
+        "STUDIO_QUEUE_URL",
+        "https://example.invalid/studio.fifo",
+    )
 
     fake_ssm = FakeSSM()
     fake_ddb = FakeDDB()
+    fake_sqs = FakeSQS()
 
     def fake_client(
         service_name,
         *args,
         **kwargs,
     ):
-        if service_name == "ssm":
-            return fake_ssm
-
-        if service_name == "dynamodb":
-            return fake_ddb
-
-        raise AssertionError(
-            f"unexpected AWS service: {service_name}"
-        )
+        return {
+            "ssm": fake_ssm,
+            "dynamodb": fake_ddb,
+            "sqs": fake_sqs,
+        }[
+            service_name
+        ]
 
     monkeypatch.setattr(
         boto3,

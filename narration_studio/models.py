@@ -9,6 +9,7 @@ from enum import Enum
 
 _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 _ID_RE = re.compile(r"^[a-z]+_[0-9a-f]{32}$")
+_QUOTE_MODES = frozenset({"preserve", "exclude", "two_voice"})
 
 
 class StudioContractError(ValueError):
@@ -25,13 +26,18 @@ class VoiceStatus(str, Enum):
     DISABLED = "DISABLED"
 
 
-class GenerationStatus(str, Enum):
-    DRAFT = "DRAFT"
-    READY = "READY"
+class GenerationExecutionStatus(str, Enum):
     QUEUED = "QUEUED"
     RUNNING = "RUNNING"
-    SUCCEEDED = "SUCCEEDED"
+    COMPLETED = "COMPLETED"
     FAILED = "FAILED"
+
+
+class GenerationReviewStatus(str, Enum):
+    UNREVIEWED = "UNREVIEWED"
+    SELECTED = "SELECTED"
+    READY = "READY"
+    OUTDATED = "OUTDATED"
 
 
 def _require_nonempty(
@@ -274,11 +280,19 @@ class GenerationRecord:
     doc_id: str
     document_revision: int
     document: ArtifactRef
+    source_post_id: str
+    source_content_hash: str
+    source_narration_hash: str
     voice_id: str
     voice_version: int
     voice_reference_audio: ArtifactRef
+    quote_mode: str
+    quote_voice_id: str | None
+    quote_voice_version: int | None
+    quote_voice_reference_audio: ArtifactRef | None
     generation_input: ArtifactRef
-    status: GenerationStatus
+    generation_status: GenerationExecutionStatus | None
+    review_status: GenerationReviewStatus
     version: int
     created_at: str
     updated_at: str
@@ -299,19 +313,85 @@ class GenerationRecord:
             prefix="doc",
             field="doc_id",
         )
+        _require_positive_int(
+            self.document_revision,
+            field="document_revision",
+        )
+        _require_nonempty(
+            self.source_post_id,
+            field="source_post_id",
+        )
+        _require_sha256(
+            self.source_content_hash,
+            field="source_content_hash",
+        )
+        _require_sha256(
+            self.source_narration_hash,
+            field="source_narration_hash",
+        )
         _require_prefixed_id(
             self.voice_id,
             prefix="voice",
             field="voice_id",
         )
         _require_positive_int(
-            self.document_revision,
-            field="document_revision",
-        )
-        _require_positive_int(
             self.voice_version,
             field="voice_version",
         )
+
+        if self.quote_mode not in _QUOTE_MODES:
+            raise StudioContractError(
+                "quote_mode must be preserve, exclude, or two_voice"
+            )
+
+        if self.quote_mode == "two_voice":
+            if (
+                self.quote_voice_id is None
+                or self.quote_voice_version is None
+                or self.quote_voice_reference_audio is None
+            ):
+                raise StudioContractError(
+                    "two_voice requires a fully pinned quote voice"
+                )
+
+            _require_prefixed_id(
+                self.quote_voice_id,
+                prefix="voice",
+                field="quote_voice_id",
+            )
+            _require_positive_int(
+                self.quote_voice_version,
+                field="quote_voice_version",
+            )
+
+        elif (
+            self.quote_voice_id is not None
+            or self.quote_voice_version is not None
+            or self.quote_voice_reference_audio is not None
+        ):
+            raise StudioContractError(
+                "quote voice fields are forbidden unless quote_mode is two_voice"
+            )
+
+        if (
+            self.generation_status is not None
+            and not isinstance(
+                self.generation_status,
+                GenerationExecutionStatus,
+            )
+        ):
+            raise StudioContractError(
+                "generation_status is invalid"
+            )
+
+        if not isinstance(
+            self.review_status,
+            GenerationReviewStatus,
+        ):
+            raise StudioContractError(
+                "review_status is invalid"
+            )
+
         _require_positive_int(
             self.version,
             field="version",

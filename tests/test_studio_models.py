@@ -2,8 +2,9 @@ import pytest
 
 from narration_studio.models import (
     ArtifactRef,
+    GenerationExecutionStatus,
     GenerationRecord,
-    GenerationStatus,
+    GenerationReviewStatus,
     RoomRecord,
     RoomStatus,
     StudioContractError,
@@ -103,22 +104,32 @@ def test_voice_contract_pins_reference():
     )
 
 
-def test_generation_contract_pins_document_and_voice():
+def test_generation_contract_pins_source_document_voice_and_state():
     generation = GenerationRecord(
         room_id=ROOM_ID,
         generation_id=GEN_ID,
         doc_id=DOC_ID,
         document_revision=3,
         document=ref(SHA_A),
+        source_post_id="ghostpost123",
+        source_content_hash=SHA_A,
+        source_narration_hash=SHA_B,
         voice_id=VOICE_ID,
         voice_version=7,
         voice_reference_audio=ref(
             SHA_B
         ),
+        quote_mode="preserve",
+        quote_voice_id=None,
+        quote_voice_version=None,
+        quote_voice_reference_audio=None,
         generation_input=ref(
             SHA_C
         ),
-        status=GenerationStatus.READY,
+        generation_status=None,
+        review_status=(
+            GenerationReviewStatus.UNREVIEWED
+        ),
         version=1,
         created_at=NOW,
         updated_at=NOW,
@@ -126,9 +137,20 @@ def test_generation_contract_pins_document_and_voice():
 
     assert generation.document_revision == 3
     assert generation.voice_version == 7
+    assert generation.generation_status is None
     assert (
-        generation.status
-        is GenerationStatus.READY
+        generation.review_status
+        is GenerationReviewStatus.UNREVIEWED
+    )
+
+    assert {
+        item.value
+        for item in GenerationExecutionStatus
+    }.isdisjoint(
+        {
+            item.value
+            for item in GenerationReviewStatus
+        }
     )
 
 

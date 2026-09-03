@@ -291,6 +291,15 @@ class DynamoStudioRepository:
             "document_sha256": _s(
                 generation.document.sha256
             ),
+            "source_post_id": _s(
+                generation.source_post_id
+            ),
+            "source_content_hash": _s(
+                generation.source_content_hash
+            ),
+            "source_narration_hash": _s(
+                generation.source_narration_hash
+            ),
             "voice_id": _s(
                 generation.voice_id
             ),
@@ -306,6 +315,9 @@ class DynamoStudioRepository:
             "voice_reference_sha256": _s(
                 generation.voice_reference_audio.sha256
             ),
+            "quote_mode": _s(
+                generation.quote_mode
+            ),
             "generation_input_bucket": _s(
                 generation.generation_input.bucket
             ),
@@ -315,8 +327,8 @@ class DynamoStudioRepository:
             "generation_input_sha256": _s(
                 generation.generation_input.sha256
             ),
-            "status": _s(
-                generation.status.value
+            "review_status": _s(
+                generation.review_status.value
             ),
             "version": _n(
                 generation.version
@@ -328,6 +340,39 @@ class DynamoStudioRepository:
                 generation.updated_at
             ),
         }
+
+        if generation.generation_status is not None:
+            item[
+                "generation_status"
+            ] = _s(
+                generation.generation_status.value
+            )
+
+        if generation.quote_voice_id is not None:
+            assert (
+                generation.quote_voice_version
+                is not None
+            )
+            assert (
+                generation.quote_voice_reference_audio
+                is not None
+            )
+
+            item["quote_voice_id"] = _s(
+                generation.quote_voice_id
+            )
+            item["quote_voice_version"] = _n(
+                generation.quote_voice_version
+            )
+            item["quote_voice_reference_bucket"] = _s(
+                generation.quote_voice_reference_audio.bucket
+            )
+            item["quote_voice_reference_key"] = _s(
+                generation.quote_voice_reference_audio.key
+            )
+            item["quote_voice_reference_sha256"] = _s(
+                generation.quote_voice_reference_audio.sha256
+            )
 
         try:
             self._client.put_item(

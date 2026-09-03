@@ -42,7 +42,6 @@ class StudioService:
         self._studio_repository.create_room(
             room
         )
-
         return room
 
     def import_narration_document(
@@ -63,8 +62,6 @@ class StudioService:
             created_at=created_at,
         )
 
-        # Durable order:
-        # immutable bytes first, metadata pointer second.
         self._artifacts.put_immutable(
             prepared.artifact
         )
@@ -102,8 +99,6 @@ class StudioService:
             updated_at=created_at,
         )
 
-        # Durable order:
-        # immutable reference WAV first, registry pointer second.
         self._artifacts.put_immutable(
             prepared.artifact
         )
@@ -121,6 +116,8 @@ class StudioService:
         generation_id: str,
         revision: StudioDocumentRevision,
         voice: VoiceRecord,
+        quote_mode: str,
+        quote_voice: VoiceRecord | None,
         created_at: str,
     ) -> PreparedGeneration:
         prepared = prepare_generation_input(
@@ -128,13 +125,12 @@ class StudioService:
             generation_id=generation_id,
             revision=revision,
             voice=voice,
+            quote_mode=quote_mode,
+            quote_voice=quote_voice,
             bucket=self._bucket_name,
             created_at=created_at,
         )
 
-        # Durable order:
-        # immutable generation snapshot first,
-        # READY metadata record second.
         self._artifacts.put_immutable(
             prepared.artifact
         )
