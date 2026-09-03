@@ -382,9 +382,24 @@ canonical package.
 
 Object key:
 
-`narration-documents/<post_id>/<content_hash>/<narration_hash>.json`
+`narration-documents/<post_id>/<content_hash>/p<processor_version:06d>/<narration_hash>.json`
 
 The document bytes are canonical UTF-8 JSON.
+
+The storage address includes the Narration Document processor version as
+an exact six-digit namespace such as `p000001`.
+
+V1 processor versions are integers from `1` through `999999`. Callers
+constructing a Narration Document storage key must supply the actual
+`processor_version` from that document; the storage-key API does not
+silently assume processor version 1.
+
+`processor_version` is deliberately excluded from `narration_hash`
+because it is processing provenance rather than narration semantics.
+However, it is present in the stored document bytes. Including the
+processor version in the immutable S3 address therefore prevents two
+different processor-version documents with the same semantic
+`narration_hash` from colliding at one immutable key.
 
 The object is immutable and uses conditional create semantics.
 
