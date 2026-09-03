@@ -592,6 +592,9 @@ def _generations(post_id: str) -> list[dict[str, Any]]:
         if not _is_generation_item(item):
             continue
 
+        if item.get("studio_origin") != "TEAM_STUDIO":
+            continue
+
         values.append(
             {
                 key: value
@@ -674,6 +677,18 @@ def _create_generation(post_id: str, body: dict[str, Any]) -> dict[str, Any]:
         quote_mode=quote_mode,
         quote_voice=quote_voice,
         created_at=_now(),
+    )
+
+    _ddb.update_item(
+        TableName=APP_TABLE,
+        Key={
+            "pk": {"S": f"ROOM#{revision.room_id}"},
+            "sk": {"S": f"GEN#{generation_id}"},
+        },
+        UpdateExpression="SET studio_origin = :origin",
+        ExpressionAttributeValues={
+            ":origin": {"S": "TEAM_STUDIO"},
+        },
     )
 
     return {
@@ -987,11 +1002,6 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
                 200,
                 {
                     "execution_enabled": EXECUTION_ENABLED,
-                    "environment": "DEV",
-                    "processor_version": 3,
-                    "worker_memory_mb": 8192,
-                    "worker_maximum_concurrency": 6,
-                    "publishing_enabled": False,
                 },
             )
 

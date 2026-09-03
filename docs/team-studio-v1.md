@@ -82,3 +82,19 @@ Team Studio has no authority to:
 - publish a generation.
 
 Ghost/Production Manager UI remains deferred.
+
+
+## Team-facing cleanup
+
+The visible Studio intentionally omits Lambda memory, concurrency, queue,
+processor implementation and production-boundary rollout details. Operators
+see product concepts only: posts, narration text, voices, generation state,
+audio and review.
+
+New generations created through this surface are stamped
+`studio_origin = TEAM_STUDIO`. The Team Studio generation history filters on
+that marker. Earlier integration and quality-baseline generation rows remain
+intact for audit but do not appear in the team interface.
+
+The Voice Library displays ACTIVE voices by default. Archived/DISABLED
+registry records remain preserved but do not clutter narrator selection.

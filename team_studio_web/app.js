@@ -110,27 +110,28 @@ function updateRuntime() {
 
   chips.forEach((chip) => {
     chip.querySelector(".dot").classList.toggle("paused", !enabled);
-    chip.querySelector("strong").textContent = enabled ? "Processing online" : "Processing paused";
+    chip.querySelector("strong").textContent = enabled ? "Studio ready" : "Processing unavailable";
     chip.querySelector("small").textContent = enabled
-      ? "Up to 6 narrations can run together"
-      : "6 × 8 GB profile ready";
+      ? "Narration processing"
+      : "Please refresh in a moment";
   });
 
+  const activeVoices = state.voices.filter((voice) => voice.status === "ACTIVE");
   const button = $("#generate-button");
   if (button) {
-    button.disabled = !enabled || state.voices.filter((voice) => voice.status === "ACTIVE").length === 0;
-    button.textContent = enabled ? "Generate audio" : "Processing paused";
+    button.disabled = !enabled || activeVoices.length === 0;
+    button.textContent = enabled ? "Generate audio" : "Processing unavailable";
   }
 
   const note = $("#execution-note");
   if (note) {
     note.querySelector(".dot").classList.toggle("paused", !enabled);
     note.querySelector("strong").textContent = enabled
-      ? "Generation will enqueue immediately."
-      : "Execution is paused for frontend review.";
+      ? "Create a fresh narration."
+      : "Narration processing is temporarily unavailable.";
     note.querySelector("p").textContent = enabled
-      ? "The job will enter the six-worker FIFO pipeline and status will update automatically."
-      : "The six-worker runtime is configured, but no jobs can be queued from this UI yet.";
+      ? "Your voice and quote choices stay attached to this audio version."
+      : "Refresh the Studio before trying again.";
   }
 }
 
@@ -186,11 +187,12 @@ function voiceCard(voice) {
 }
 
 function renderVoices() {
-  $("#voice-grid").innerHTML = state.voices.length
-    ? state.voices.map(voiceCard).join("")
-    : `<div class="empty"><strong>No voices yet</strong>Add a reference WAV.</div>`;
-
   const active = state.voices.filter((voice) => voice.status === "ACTIVE");
+
+  $("#voice-grid").innerHTML = active.length
+    ? active.map(voiceCard).join("")
+    : `<div class="empty"><strong>No active voices</strong>Add a reference WAV.</div>`;
+
   const options = active.map((voice) =>
     `<option value="${esc(voice.voice_id)}">${esc(voice.display_name || voice.voice_id)}</option>`
   ).join("");
@@ -259,8 +261,7 @@ function renderCurrentPost(payload) {
   $("#post-title").textContent = post.title;
   $("#ghost-link").href = post.url;
   $("#page-title").textContent = post.title;
-  $("#document-heading").textContent = `Processor V${doc.processor_version} · ${doc.blocks.length} blocks`;
-  $("#document-hashes").innerHTML = `content ${esc(short(doc.content_hash))}<br>narration ${esc(short(doc.narration_hash))}`;
+  $("#document-heading").textContent = `${doc.blocks.length} narration blocks`;
   $("#document-preview").innerHTML = doc.blocks.map(docBlock).join("");
   $("#generation-count").textContent = `${generations.length} generation${generations.length === 1 ? "" : "s"}`;
   $("#generation-list").innerHTML = generations.length
