@@ -166,16 +166,23 @@ def _session(event: dict[str, Any]) -> dict[str, Any] | None:
 
     try:
         claims = verify_session(
-            token,
-            _secret(),
+            token=token,
+            signing_secret=_secret(),
         )
     except Exception:
         return None
 
-    if (
-        not isinstance(claims, dict)
-        or claims.get("sub") != OWNER_ID
-    ):
+    if isinstance(claims, dict):
+        subject = claims.get("sub") or claims.get("subject")
+    elif isinstance(claims, str):
+        subject = claims
+    else:
+        subject = (
+            getattr(claims, "sub", None)
+            or getattr(claims, "subject", None)
+        )
+
+    if subject != OWNER_ID:
         return None
 
     return claims

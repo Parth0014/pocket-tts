@@ -41,3 +41,11 @@ def test_manager_keeps_review_and_execution_separate():
     assert "SELECTED" in text
     assert "READY" in text
     assert "OUTDATED" in text
+
+def test_manager_uses_shared_session_contract_by_keyword():
+    text = source()
+
+    assert "token=token" in text
+    assert "signing_secret=_secret()" in text
+    assert 'claims.get("sub")' in text
+    assert 'getattr(claims, "subject"' in text
