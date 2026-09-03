@@ -803,3 +803,39 @@ def test_nonconditional_state_failure_is_sanitized():
     assert "sensitive" not in str(
         exc_info.value
     )
+
+def test_current_state_converts_dynamodb_decimal_numbers():
+    from decimal import Decimal
+
+    table = RecordingTable()
+
+    table.get_responses = [
+        {
+            "Item": {
+                "pk": GHOST_SYNC_PK,
+                "sk": GHOST_SYNC_SK,
+                "sync_id": SYNC_ID,
+                "status": "RUNNING",
+                "next_page": Decimal("1"),
+                "started_at": START,
+                "updated_at": NOW,
+                "expected_total": Decimal("714"),
+                "expected_pages": Decimal("8"),
+            }
+        }
+    ]
+
+    state = DynamoSyncStateStore(
+        table=table
+    ).get_current()
+
+    assert state is not None
+
+    assert state.next_page == 1
+    assert type(state.next_page) is int
+
+    assert state.expected_total == 714
+    assert type(state.expected_total) is int
+
+    assert state.expected_pages == 8
+    assert type(state.expected_pages) is int

@@ -169,7 +169,11 @@ class GhostContentClient:
                 f"Ghost transport failed for page {page}"
             ) from exc
 
-        result = parse_posts_page(payload)
+        result = parse_posts_page(
+            _normalize_posts_payload_timestamps(
+                payload
+            )
+        )
 
         if result.pagination.page != page:
             raise GhostContentResponseError(
@@ -183,6 +187,64 @@ class GhostContentClient:
 
         return result
 
+
+def _normalize_ghost_utc_timestamp(
+    value: Any,
+) -> Any:
+    """Canonicalize Ghost's equivalent +00:00 UTC representation."""
+
+    if not isinstance(value, str):
+        return value
+
+    if value.endswith("+00:00"):
+        return value[:-6] + "Z"
+
+    return value
+
+
+def _normalize_posts_payload_timestamps(
+    payload: Mapping[str, Any],
+) -> Mapping[str, Any]:
+    """Canonicalize Ghost timestamps without mutating transport JSON."""
+
+    posts = payload.get("posts")
+
+    if not isinstance(posts, list):
+        return payload
+
+    normalized_posts: list[Any] = []
+    changed = False
+
+    for raw_post in posts:
+        if not isinstance(raw_post, Mapping):
+            normalized_posts.append(raw_post)
+            continue
+
+        post = dict(raw_post)
+
+        for field in (
+            "published_at",
+            "updated_at",
+        ):
+            before = post.get(field)
+
+            after = _normalize_ghost_utc_timestamp(
+                before
+            )
+
+            if before != after:
+                post[field] = after
+                changed = True
+
+        normalized_posts.append(post)
+
+    if not changed:
+        return payload
+
+    normalized_payload = dict(payload)
+    normalized_payload["posts"] = normalized_posts
+
+    return normalized_payload
 
 def parse_posts_page(
     payload: Mapping[str, Any],

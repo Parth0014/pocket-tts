@@ -503,3 +503,62 @@ def test_pagination_rejects_boolean_as_integer():
         match="integer",
     ):
         parse_posts_page(payload)
+
+def test_live_ghost_plus_00_timestamp_is_normalized():
+    import narration_content.ghost_client as module
+
+    payload = {
+        "posts": [
+            {
+                "published_at": "2026-09-03T08:00:00.000+00:00",
+                "updated_at": "2026-09-03T08:01:02.345+00:00",
+            }
+        ]
+    }
+
+    normalized = module._normalize_posts_payload_timestamps(
+        payload
+    )
+
+    assert normalized["posts"][0]["published_at"] == (
+        "2026-09-03T08:00:00.000Z"
+    )
+
+    assert normalized["posts"][0]["updated_at"] == (
+        "2026-09-03T08:01:02.345Z"
+    )
+
+    assert payload["posts"][0]["published_at"] == (
+        "2026-09-03T08:00:00.000+00:00"
+    )
+
+
+def test_existing_ghost_z_timestamp_is_not_rewritten():
+    import narration_content.ghost_client as module
+
+    payload = {
+        "posts": [
+            {
+                "published_at": "2026-09-03T08:00:00.000Z",
+                "updated_at": "2026-09-03T08:01:00.000Z",
+            }
+        ]
+    }
+
+    assert (
+        module._normalize_posts_payload_timestamps(
+            payload
+        )
+        is payload
+    )
+
+
+def test_non_utc_offset_is_not_reinterpreted_as_utc():
+    import narration_content.ghost_client as module
+
+    assert (
+        module._normalize_ghost_utc_timestamp(
+            "2026-09-03T10:00:00+02:00"
+        )
+        == "2026-09-03T10:00:00+02:00"
+    )

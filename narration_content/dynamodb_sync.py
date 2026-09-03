@@ -14,6 +14,7 @@ The CURRENT sync-state item uses conditional ownership for every transition.
 from __future__ import annotations
 
 from collections.abc import Mapping
+from decimal import Decimal
 from typing import Any
 from uuid import uuid4
 
@@ -77,6 +78,36 @@ def _is_conditional_failure(
         == "ConditionalCheckFailedException"
     )
 
+
+def _dynamo_optional_int(
+    value: Any,
+    *,
+    field: str,
+) -> int | None:
+    """Convert an exact DynamoDB integer into a native Python int."""
+
+    if value is None:
+        return None
+
+    if isinstance(value, bool):
+        raise DynamoSyncStateStoreError(
+            f"Ghost sync CURRENT {field} is invalid"
+        )
+
+    if isinstance(value, int):
+        return value
+
+    if isinstance(value, Decimal):
+        if value != value.to_integral_value():
+            raise DynamoSyncStateStoreError(
+                f"Ghost sync CURRENT {field} is invalid"
+            )
+
+        return int(value)
+
+    raise DynamoSyncStateStoreError(
+        f"Ghost sync CURRENT {field} is invalid"
+    )
 
 def _author_item(author) -> dict[str, str]:
     result = {
@@ -979,8 +1010,9 @@ class DynamoSyncStateStore:
                 status=SyncStatus(
                     item["status"]
                 ),
-                next_page=item.get(
-                    "next_page"
+                next_page=_dynamo_optional_int(
+                    item.get("next_page"),
+                    field="next_page",
                 ),
                 started_at=str(
                     item["started_at"]
@@ -988,11 +1020,13 @@ class DynamoSyncStateStore:
                 updated_at=str(
                     item["updated_at"]
                 ),
-                expected_total=item.get(
-                    "expected_total"
+                expected_total=_dynamo_optional_int(
+                    item.get("expected_total"),
+                    field="expected_total",
                 ),
-                expected_pages=item.get(
-                    "expected_pages"
+                expected_pages=_dynamo_optional_int(
+                    item.get("expected_pages"),
+                    field="expected_pages",
                 ),
                 completed_at=item.get(
                     "completed_at"
