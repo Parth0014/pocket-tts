@@ -499,6 +499,27 @@ def _put_bridge_state(
         Item=current,
     )
 
+    manager_index = dict(
+        intake.current
+    )
+    manager_index["pk"] = "MANAGER#INTAKE"
+    manager_index["sk"] = (
+        "POST#"
+        + str(
+            intake.current["post_id"]
+        )
+    )
+    manager_index["entity_type"] = (
+        "studio_manager_intake_index"
+    )
+
+    _ddb.put_item(
+        TableName=APP_TABLE,
+        Item=_ddb_item(
+            manager_index
+        ),
+    )
+
     return (
         "DUPLICATE"
         if duplicate
