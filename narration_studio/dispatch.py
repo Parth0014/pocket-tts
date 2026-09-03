@@ -10,7 +10,6 @@ from .artifacts import PreparedArtifact
 from .models import StudioContractError
 from .worker_contract import (
     DEV_BUCKET,
-    FIFO_MESSAGE_GROUP_ID,
     canonical_job_json,
     job_fingerprint,
     validate_worker_job_v1,
@@ -506,7 +505,7 @@ class SqsStudioJobPublisher:
         response = self._client.send_message(
             QueueUrl=self._queue_url,
             MessageBody=pinned.body,
-            MessageGroupId=FIFO_MESSAGE_GROUP_ID,
+            MessageGroupId=pinned.generation_id,
             MessageDeduplicationId=pinned.generation_id,
         )
         message_id = response.get("MessageId")

@@ -13,7 +13,6 @@ from .artifacts import PreparedArtifact
 from .models import StudioContractError
 
 DEV_BUCKET = "pocket-tts-dev-test"
-FIFO_MESSAGE_GROUP_ID = "tts"
 
 _SAFE_ID_RE = re.compile(r"^[A-Za-z0-9_-]{1,128}$")
 _JOB_ID_RE = re.compile(r"^job_[0-9a-f]{32}$")

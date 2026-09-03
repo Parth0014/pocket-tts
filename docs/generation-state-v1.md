@@ -53,8 +53,10 @@ The exact Worker V1 body and SHA-256 fingerprint are pinned to the generation be
 
 FIFO transport remains:
 
-- MessageGroupId = `tts`
+- MessageGroupId = `generation_id`
 - MessageDeduplicationId = `generation_id`
+
+Different generation IDs occupy different FIFO groups and may execute concurrently. A retry of the same logical generation preserves its generation_id, message group, body, and deduplication identity.
 
 After SQS accepts the message, App API conditionally sets `generation_status = QUEUED`.
 

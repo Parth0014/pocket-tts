@@ -497,7 +497,7 @@ def test_fifo_publisher_uses_frozen_transport_values():
                 "studio.fifo"
             ),
             "MessageBody": pinned.body,
-            "MessageGroupId": "tts",
+            "MessageGroupId": GENERATION_ID,
             "MessageDeduplicationId": (
                 GENERATION_ID
             ),

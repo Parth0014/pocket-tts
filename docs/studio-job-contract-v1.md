@@ -1,5 +1,7 @@
 # Studio TTS Job Contract V1
 
+> The V1 JSON body remains frozen. FIFO transport now groups by generation_id so distinct generations can run concurrently; schema_version remains 1.
+
 Status: Frozen V1 execution contract
 
 This document defines the message body consumed from the Studio FIFO
@@ -21,7 +23,7 @@ Consumer:
 
 FIFO producer values:
 
-`MessageGroupId = "tts"`
+`MessageGroupId = generation_id`
 
 `MessageDeduplicationId = generation_id`
 

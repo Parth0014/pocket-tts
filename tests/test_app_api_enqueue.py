@@ -304,7 +304,7 @@ def test_authenticated_enqueue_pins_sends_and_marks_queued(
 
     assert call[
         "MessageGroupId"
-    ] == "tts"
+    ] == GEN_ID
 
     assert call[
         "MessageDeduplicationId"
