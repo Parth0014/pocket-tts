@@ -20,6 +20,7 @@ from .models import (
     VoiceRecord,
     VoiceStatus,
 )
+from .service import StudioService
 
 __all__ = [
     "ArtifactRef",
@@ -33,6 +34,7 @@ __all__ = [
     "RoomStatus",
     "StudioContractError",
     "StudioDocumentRevision",
+    "StudioService",
     "VoiceRecord",
     "VoiceStatus",
     "prepare_generation_input",
