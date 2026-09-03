@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from typing import Any, Optional, Protocol
 from urllib.parse import urlencode, urlsplit, urlunsplit
 
@@ -191,16 +192,41 @@ class GhostContentClient:
 def _normalize_ghost_utc_timestamp(
     value: Any,
 ) -> Any:
-    """Canonicalize Ghost's equivalent +00:00 UTC representation."""
+    """Convert an aware Ghost RFC 3339 timestamp to canonical UTC Z."""
 
     if not isinstance(value, str):
         return value
 
-    if value.endswith("+00:00"):
-        return value[:-6] + "Z"
+    if value.endswith("Z"):
+        return value
 
-    return value
+    try:
+        parsed = datetime.fromisoformat(
+            value
+        )
+    except ValueError:
+        return value
 
+    if (
+        parsed.tzinfo is None
+        or parsed.utcoffset() is None
+    ):
+        return value
+
+    utc_value = parsed.astimezone(
+        timezone.utc
+    )
+
+    return (
+        utc_value
+        .isoformat(
+            timespec="milliseconds"
+        )
+        .replace(
+            "+00:00",
+            "Z",
+        )
+    )
 
 def _normalize_posts_payload_timestamps(
     payload: Mapping[str, Any],
