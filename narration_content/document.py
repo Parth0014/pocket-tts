@@ -19,9 +19,8 @@ from __future__ import annotations
 from collections.abc import Iterable, Mapping
 from copy import deepcopy
 
-
 SCHEMA_VERSION = 1
-PROCESSOR_VERSION = 1
+PROCESSOR_VERSION = 2
 
 
 INPUT_FIELDS_BY_TYPE = {

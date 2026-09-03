@@ -12,7 +12,6 @@ from narration_content import (
     validate_document,
 )
 
-
 CONTENT_HASH = "a" * 64
 
 
@@ -87,7 +86,7 @@ def test_build_document_assigns_deterministic_ids_roles_and_shapes():
     assert document["schema_version"] == 1
     assert document["post_id"] == "ghost-post-123"
     assert document["content_hash"] == CONTENT_HASH
-    assert document["processor_version"] == 1
+    assert document["processor_version"] == 2
 
     assert [
         block["block_id"]

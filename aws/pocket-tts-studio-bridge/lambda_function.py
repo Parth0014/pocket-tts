@@ -449,14 +449,14 @@ def _put_bridge_state(
                 "bridge receipt disappeared"
             )
 
+        # Receipt identity is post_id + content_hash. Derived canonical
+        # artifacts may change when PROCESSOR_VERSION advances without
+        # creating a new Ghost ingestion identity.
         for field in (
             "post_id",
             "content_hash",
-            "narration_hash",
             "raw_bucket",
             "raw_key",
-            "document_bucket",
-            "document_key",
         ):
             if _string(
                 existing,

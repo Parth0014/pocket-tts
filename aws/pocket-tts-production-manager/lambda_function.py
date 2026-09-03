@@ -410,6 +410,10 @@ def _adopt(
         existing is not None
         and existing.get("source_content_hash")
         == current.get("content_hash")
+        and existing.get("source_narration_hash")
+        == current.get("narration_hash")
+        and existing.get("source_processor_version")
+        == current.get("processor_version")
     ):
         return {
             **existing,

@@ -548,13 +548,13 @@ def test_prepare_canonical_post_uses_exact_shared_pipeline():
         )
     )
 
-    assert prepared.processor_version == 1
-    assert "/p000001/" in prepared.narration_document.key
+    assert prepared.processor_version == 2
+    assert "/p000002/" in prepared.narration_document.key
     assert (
         prepared.narration_document.metadata[
             "processor-version"
         ]
-        == "1"
+        == "2"
     )
 
     validated = validate_document(

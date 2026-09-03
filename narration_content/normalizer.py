@@ -22,7 +22,6 @@ from collections.abc import Iterable
 
 from bs4 import BeautifulSoup, NavigableString, Tag
 
-
 _HEADING_NAMES = {
     "h1": 1,
     "h2": 2,
@@ -669,6 +668,78 @@ def _caption_allowed_inside_card(card: Tag | None) -> bool:
     return "kg-image-card" in classes
 
 
+_TRAILING_NON_NARRATION_EXACT = frozenset(
+    {
+        "share this story",
+    }
+)
+
+_TRAILING_NON_NARRATION_PREFIXES = (
+    "every story is a reminder that ",
+)
+
+_TRAILING_STORY_SOLICITATION_PREFIX = (
+    "i would love to hear your story"
+)
+
+
+def _block_text_for_tail_policy(block: dict) -> str | None:
+    text = block.get("text")
+
+    if not isinstance(text, str):
+        return None
+
+    normalized = _normalize_text(text)
+
+    return normalized if normalized else None
+
+
+def _is_trailing_non_narration_block(block: dict) -> bool:
+    """Recognize conservative Ghost/site footer copy only at document tail."""
+    text = _block_text_for_tail_policy(block)
+
+    if text is None:
+        return False
+
+    folded = text.casefold()
+
+    if folded in _TRAILING_NON_NARRATION_EXACT:
+        return True
+
+    if any(
+        folded.startswith(prefix)
+        for prefix in _TRAILING_NON_NARRATION_PREFIXES
+    ):
+        return True
+
+    if folded.startswith(
+        _TRAILING_STORY_SOLICITATION_PREFIX
+    ):
+        return (
+            "write to me at" in folded
+            or "@" in text
+        )
+
+    return False
+
+
+def _trim_trailing_non_narration_blocks(
+    blocks: list[dict],
+) -> list[dict]:
+    """Trim only one contiguous recognized non-narration suffix."""
+    end = len(blocks)
+
+    while (
+        end > 0
+        and _is_trailing_non_narration_block(
+            blocks[end - 1]
+        )
+    ):
+        end -= 1
+
+    return blocks[:end]
+
+
 def normalize_ghost_html(html: str) -> list[dict]:
     """Normalize exact Ghost post HTML into Narration Document V1 blocks."""
     if not isinstance(html, str):
@@ -788,4 +859,6 @@ def normalize_ghost_html(html: str) -> list[dict]:
                     }
                 )
 
-    return blocks
+    return _trim_trailing_non_narration_blocks(
+        blocks
+    )
