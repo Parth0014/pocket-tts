@@ -148,7 +148,64 @@ Write-Host "Release tag free   : YES"
 Write-Host "Git tag free       : YES"
 
 # ------------------------------------------------------------------
-# 4. Docker availability
+# 4. Worker S3 permission contract
+# ------------------------------------------------------------------
+
+$WorkerRoleArn = (
+    aws lambda get-function-configuration `
+        --function-name $Function `
+        --region $Region `
+        --query Role `
+        --output text
+).Trim()
+
+Assert-LastExitCode "Reading Worker execution role"
+
+if ([string]::IsNullOrWhiteSpace($WorkerRoleArn)) {
+    throw "Worker execution role ARN is empty."
+}
+
+$WorkerRoleName = ($WorkerRoleArn -split '/')[-1]
+
+$WorkerS3PolicyRaw = aws iam get-role-policy `
+    --role-name $WorkerRoleName `
+    --policy-name PocketTTSDevS3Access `
+    --output json
+
+Assert-LastExitCode "Reading Worker DEV S3 inline policy"
+
+$WorkerS3Policy = $WorkerS3PolicyRaw | ConvertFrom-Json
+
+$ExpectedDevBucketArn = "arn:aws:s3:::pocket-tts-dev-test"
+$HasDevListBucket = $false
+
+foreach ($Statement in @($WorkerS3Policy.PolicyDocument.Statement)) {
+    $Actions = @($Statement.Action)
+    $Resources = @($Statement.Resource)
+
+    if (
+        $Statement.Effect -eq "Allow" -and
+        $Actions -contains "s3:ListBucket" -and
+        $Resources -contains $ExpectedDevBucketArn
+    ) {
+        $HasDevListBucket = $true
+        break
+    }
+}
+
+if (-not $HasDevListBucket) {
+    throw (
+        "Worker role '$WorkerRoleName' is missing s3:ListBucket on " +
+        "'$ExpectedDevBucketArn'. Worker V2 uses HeadObject for immutable " +
+        "generation-output existence checks; without ListBucket, an absent " +
+        "object is returned as 403 instead of 404."
+    )
+}
+
+Write-Host "Worker DEV ListBucket: PRESENT"
+
+# ------------------------------------------------------------------
+# 5. Docker availability
 # ------------------------------------------------------------------
 
 docker version --format '{{.Server.Version}}' | Out-Null
