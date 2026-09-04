@@ -770,7 +770,7 @@ def _trim_trailing_non_narration_blocks(
     return blocks[:end]
 
 
-def normalize_ghost_html(html: str) -> list[dict]:
+def _normalize_ghost_html_v3(html: str) -> list[dict]:
     """Normalize exact Ghost post HTML into Narration Document V1 blocks."""
     if not isinstance(html, str):
         raise TypeError(
@@ -892,3 +892,73 @@ def normalize_ghost_html(html: str) -> list[dict]:
     return _trim_trailing_non_narration_blocks(
         blocks
     )
+
+
+_STORY_PROVENANCE_RE = re.compile(
+    r"(?is)(?:^|(?<=[.!?])\s+)"
+    r"(?P<sentence>[^.!?]*\bstory\b[^.!?]*\btruest\s+form\b[^.!?]*(?:[.!?]+|$))"
+)
+
+
+def _trim_after_story_provenance(
+    blocks: list[dict[str, object]],
+) -> list[dict[str, object]]:
+    """Cut trailing CTA/footer after the final editorial provenance sentence.
+
+    The canonical boundary is the final sentence that contains both "story"
+    and "truest form". The whole sentence is preserved, including legitimate
+    wording after "truest form". Anything after that sentence in the same
+    block, and all later blocks, is excluded from narration.
+    """
+
+    boundary: tuple[int, int] | None = None
+
+    for index, block in enumerate(blocks):
+        text = block.get("text")
+
+        if not isinstance(text, str) or not text.strip():
+            continue
+
+        matches = list(
+            _STORY_PROVENANCE_RE.finditer(text)
+        )
+
+        if matches:
+            boundary = (
+                index,
+                matches[-1].end("sentence"),
+            )
+
+    if boundary is None:
+        return blocks
+
+    block_index, sentence_end = boundary
+    trimmed: list[dict[str, object]] = []
+
+    for index, block in enumerate(blocks):
+        if index > block_index:
+            break
+
+        copied = dict(block)
+
+        if index == block_index:
+            text = copied.get("text")
+
+            if isinstance(text, str):
+                kept = text[:sentence_end].strip()
+
+                if not kept:
+                    break
+
+                copied["text"] = kept
+
+        trimmed.append(copied)
+
+    return trimmed
+
+
+def normalize_ghost_html(html: str) -> list[dict[str, object]]:
+    """Normalize Ghost HTML and apply Processor V4 story-ending boundary."""
+
+    blocks = _normalize_ghost_html_v3(html)
+    return _trim_after_story_provenance(blocks)

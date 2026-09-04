@@ -36,11 +36,11 @@ def test_punctuation_and_em_dash_are_not_removed():
     ]
 
 
-def test_new_documents_use_processor_v3():
-    assert PROCESSOR_VERSION == 3
+def test_new_documents_use_current_processor_v4():
+    assert PROCESSOR_VERSION == 4
     document = build_document(
         post_id="post",
         content_hash="a" * 64,
         blocks=[{"type": "paragraph", "text": "Gratitude."}],
     )
-    assert document["processor_version"] == 3
+    assert document["processor_version"] == 4

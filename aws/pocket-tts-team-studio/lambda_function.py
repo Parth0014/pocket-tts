@@ -447,7 +447,7 @@ def _canonical(post: dict[str, Any]) -> dict[str, Any]:
         blocks=blocks,
     )
 
-    if document.get("processor_version") != 3:
+    if document.get("processor_version") != 4:
         raise StudioError("Studio requires Processor V3")
 
     return document

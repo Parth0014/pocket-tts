@@ -16,12 +16,12 @@ def test_team_studio_has_no_direct_sqs_or_production_authority():
     assert "NarrationJobs" not in source
 
 
-def test_team_studio_reads_ghost_and_uses_canonical_v3():
+def test_team_studio_reads_ghost_and_uses_canonical_v4():
     source = HANDLER.read_text(encoding="utf-8")
 
     assert "normalize_ghost_html(" in source
     assert "build_document(" in source
-    assert 'document.get("processor_version") != 3' in source
+    assert 'document.get("processor_version") != 4' in source
     assert "ghost/api/content" in source
 
 
