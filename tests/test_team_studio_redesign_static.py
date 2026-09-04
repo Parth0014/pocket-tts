@@ -10,15 +10,29 @@ def test_redesigned_studio_keeps_live_team_workflow():
     html = HTML.read_text(encoding="utf-8")
     js = JS.read_text(encoding="utf-8")
 
-    assert "Pick a story." in html
-    assert "Give it a voice." in html
-    assert 'id="generate-button"' in html
-    assert "Generate audio" in html
-    assert "/studio-api/posts" in js
-    assert "/studio-api/voices" in js
-    assert "/studio-api/runtime" in js
-    assert "/auth/login" in js
-    assert 'credentials: "same-origin"' in js
+    for marker in (
+        'id="post-grid"',
+        'id="document-preview"',
+        'id="narrator-select"',
+        'id="quote-mode"',
+        'id="generate-button"',
+        'id="generation-list"',
+        'id="player-bar"',
+        'id="voice-grid"',
+    ):
+        assert marker in html
+
+    for marker in (
+        "/studio-api/posts",
+        "/studio-api/voices",
+        "/studio-api/runtime",
+        "/auth/login",
+        'credentials: "same-origin"',
+        '"Generate audio"',
+        "data-voice-archive",
+        "data-audio",
+    ):
+        assert marker in js
 
 
 def test_redesign_has_voice_management_and_audio_review():
