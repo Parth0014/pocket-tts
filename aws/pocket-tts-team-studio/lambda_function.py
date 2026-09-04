@@ -524,10 +524,32 @@ def _revision(item: dict[str, Any]) -> StudioDocumentRevision:
     )
 
 
+
+def _team_document_id(document):
+    import hashlib
+    import json
+
+    identity = {
+        "post_id": document["post_id"],
+        "content_hash": document["content_hash"],
+        "narration_hash": document["narration_hash"],
+        "processor_version": document["processor_version"],
+    }
+
+    payload = json.dumps(
+        identity,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+    ).encode("utf-8")
+
+    return "doc_" + hashlib.sha256(payload).hexdigest()[:32]
+
+
 def _ensure_room_document(post: dict[str, Any], document: dict[str, Any]) -> StudioDocumentRevision:
     post_id = str(post["id"])
     room_id = _room_id(post_id)
-    doc_id = _doc_id(post_id)
+    doc_id = _team_document_id(document)
     now = _now()
     service, _ = _service()
 
