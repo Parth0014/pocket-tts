@@ -449,7 +449,7 @@ def _canonical(post: dict[str, Any]) -> dict[str, Any]:
     )
 
     if document.get("processor_version") != 4:
-        raise StudioError("Studio requires Processor V3")
+        raise StudioError("Studio requires Processor V4")
 
     return document
 
@@ -472,7 +472,7 @@ def _latest_document(items: list[dict[str, Any]]) -> dict[str, Any] | None:
         return None
     return max(
         docs,
-        key=lambda item: int(item.get("revision", item.get("document_revision", 0)) or 0),
+        key=lambda item: _document_revision_number(item, default=0),
     )
 
 
@@ -484,6 +484,17 @@ def _artifact(item: dict[str, Any], name: str) -> ArtifactRef:
         bucket = item.get(f"{name}_bucket")
         key = item.get(f"{name}_key")
         sha = item.get(f"{name}_sha256")
+
+        if (
+            name == "document"
+            and not all(
+                isinstance(value, str) and value
+                for value in (bucket, key, sha)
+            )
+        ):
+            bucket = item.get("current_document_bucket")
+            key = item.get("current_document_key")
+            sha = item.get("current_document_sha256")
 
     if not all(isinstance(value, str) and value for value in (bucket, key, sha)):
         raise StudioError(f"{name} artifact metadata is incomplete")
@@ -500,6 +511,9 @@ def _document_revision_number(
 
     if value is None:
         value = item.get("document_revision")
+
+    if value is None:
+        value = item.get("current_revision")
 
     if value is None:
         if default is not None:
@@ -524,32 +538,10 @@ def _revision(item: dict[str, Any]) -> StudioDocumentRevision:
     )
 
 
-
-def _team_document_id(document):
-    import hashlib
-    import json
-
-    identity = {
-        "post_id": document["post_id"],
-        "content_hash": document["content_hash"],
-        "narration_hash": document["narration_hash"],
-        "processor_version": document["processor_version"],
-    }
-
-    payload = json.dumps(
-        identity,
-        sort_keys=True,
-        separators=(",", ":"),
-        ensure_ascii=False,
-    ).encode("utf-8")
-
-    return "doc_" + hashlib.sha256(payload).hexdigest()[:32]
-
-
 def _ensure_room_document(post: dict[str, Any], document: dict[str, Any]) -> StudioDocumentRevision:
     post_id = str(post["id"])
     room_id = _room_id(post_id)
-    doc_id = _team_document_id(document)
+    doc_id = _doc_id(post_id)
     now = _now()
     service, _ = _service()
 
@@ -570,7 +562,13 @@ def _ensure_room_document(post: dict[str, Any], document: dict[str, Any]) -> Stu
         raise StudioError("Studio room is not ACTIVE")
 
     items = _query_room(room_id)
-    latest = _latest_document(items)
+    documents = [item for item in items if _is_document_item(item)]
+    stable_documents = [
+        item
+        for item in documents
+        if item.get("doc_id") == doc_id
+    ]
+    latest = _latest_document(stable_documents)
 
     if (
         latest is not None
@@ -593,7 +591,7 @@ def _ensure_room_document(post: dict[str, Any], document: dict[str, Any]) -> Stu
         created_at=now,
     )
 
-    if latest is not None:
+    if documents:
         for item in items:
             if not _is_generation_item(item):
                 continue
