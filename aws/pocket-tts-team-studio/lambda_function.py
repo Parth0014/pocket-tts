@@ -18,6 +18,7 @@ import math
 import os
 import re
 import time
+import traceback
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -1042,5 +1043,17 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
 
     except StudioError as exc:
         return _json(409, {"error": "studio_conflict", "message": str(exc)})
-    except Exception:
+    except Exception as exc:
+        print(
+            json.dumps(
+                {
+                    "event": "team_studio_internal_error",
+                    "method": method,
+                    "path": path,
+                    "error_type": type(exc).__name__,
+                },
+                sort_keys=True,
+            )
+        )
+        traceback.print_exc()
         return _json(500, {"error": "internal_error"})

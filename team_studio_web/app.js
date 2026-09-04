@@ -464,7 +464,9 @@ function waveformBars(id) {
 }
 
 function renderWaveform(id) {
-  const html = waveformBars(id).map((h) => `<span class="wave-bar" style="height:${Math.round(h * 100)}%"></span>`).join("");
+  const html = waveformBars(id)
+    .map((h) => `<span class="wave-bar wave-h-${Math.round(h * 100)}"></span>`)
+    .join("");
   $("#waveform-bg").innerHTML = html;
   $("#waveform-fg").innerHTML = html;
 }
@@ -475,7 +477,13 @@ function updatePlayerProgress() {
   const duration = a.duration || 0;
   const current = a.currentTime || 0;
   const pct = duration ? (current / duration) * 100 : 0;
-  $("#waveform-fg").style.width = `${pct}%`;
+  const waveformFg = $("#waveform-fg");
+  for (const className of [...waveformFg.classList]) {
+    if (className.startsWith("wave-progress-")) {
+      waveformFg.classList.remove(className);
+    }
+  }
+  waveformFg.classList.add(`wave-progress-${Math.round(pct)}`);
   $("#player-waveform").setAttribute("aria-valuenow", String(Math.round(pct)));
   $("#player-current").textContent = formatTime(current);
   $("#player-duration").textContent = formatTime(duration);
