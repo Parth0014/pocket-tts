@@ -40,8 +40,20 @@ def test_team_studio_redesign_uses_new_light_brand_surface():
     css = CSS.read_text(encoding="utf-8")
 
     assert '<meta name="color-scheme" content="light">' in html
-    assert "--ember: #fe678b;" in css
-    assert "--ink: #fbf8f3;" in css
+
+    # Test semantic light-surface tokens instead of one historical palette's
+    # exact hex values. Compatibility aliases remain part of the contract.
+    for marker in (
+        "--canvas:",
+        "--surface:",
+        "--sidebar:",
+        "--ink:",
+        "--accent:",
+        "--paper: var(--ink);",
+        "--ember: var(--accent);",
+    ):
+        assert marker in css
+
     assert "Narration text" in html
     assert "Audio history" in html
 

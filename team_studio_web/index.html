@@ -4,22 +4,63 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="color-scheme" content="light">
+  <meta name="theme-color" content="#211a24">
   <title>Narration Studio</title>
   <link rel="stylesheet" href="/studio/styles.css">
 </head>
 <body>
-  <div class="glow glow-one"></div>
-  <div class="glow glow-two"></div>
+  <!-- Shared SVG icon system. Icons inherit the surrounding text colour. -->
+  <svg class="icon-sprite" aria-hidden="true">
+    <symbol id="icon-posts" viewBox="0 0 24 24">
+      <path d="M6.75 3.75h8.5l3 3v13.5H6.75z"/><path d="M15.25 3.75v3h3M9.5 11h6M9.5 14.5h6M9.5 18h3.25"/>
+    </symbol>
+    <symbol id="icon-voices" viewBox="0 0 24 24">
+      <rect x="8.25" y="3.25" width="7.5" height="12" rx="3.75"/><path d="M5.75 11.75a6.25 6.25 0 0 0 12.5 0M12 18v3M9 21h6"/>
+    </symbol>
+    <symbol id="icon-refresh" viewBox="0 0 24 24">
+      <path d="M19 7.5V3.75m0 0h-3.75M19 3.75l-2.6 2.6a7.25 7.25 0 1 0 1.72 7.4"/>
+    </symbol>
+    <symbol id="icon-search" viewBox="0 0 24 24">
+      <circle cx="10.75" cy="10.75" r="6.25"/><path d="m15.5 15.5 4 4"/>
+    </symbol>
+    <symbol id="icon-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="icon-arrow-left" viewBox="0 0 24 24"><path d="m14.5 6.5-5.5 5.5 5.5 5.5M9.5 12h10"/></symbol>
+    <symbol id="icon-arrow-right" viewBox="0 0 24 24"><path d="m9.5 6.5 5.5 5.5-5.5 5.5M4.5 12h10"/></symbol>
+    <symbol id="icon-external" viewBox="0 0 24 24"><path d="M13.5 5H19v5.5M19 5l-8.5 8.5M18 13.5V19H5V6h5.5"/></symbol>
+    <symbol id="icon-file-audio" viewBox="0 0 24 24">
+      <path d="M6.5 3.75h8l3 3V20.25h-11zM14.5 3.75v3h3"/><path d="M9 14v-2M12 16v-6M15 14.5v-3"/>
+    </symbol>
+    <symbol id="icon-sliders" viewBox="0 0 24 24"><path d="M5 7h8M17 7h2M5 17h2M11 17h8M13 4v6M8 14v6"/></symbol>
+    <symbol id="icon-sparkles" viewBox="0 0 24 24"><path d="m12 3 .85 2.65a4.25 4.25 0 0 0 2.75 2.75l2.65.85-2.65.85a4.25 4.25 0 0 0-2.75 2.75L12 15.5l-.85-2.65A4.25 4.25 0 0 0 8.4 10.1l-2.65-.85 2.65-.85a4.25 4.25 0 0 0 2.75-2.75zM18.5 15l.42 1.33a2.1 2.1 0 0 0 1.33 1.33l1.25.42-1.25.42a2.1 2.1 0 0 0-1.33 1.33l-.42 1.25-.42-1.25a2.1 2.1 0 0 0-1.33-1.33l-1.25-.42 1.25-.42a2.1 2.1 0 0 0 1.33-1.33z"/></symbol>
+    <symbol id="icon-rewind" viewBox="0 0 24 24"><path d="m10 8-4 4 4 4V8Zm8 0-4 4 4 4V8Z"/></symbol>
+    <symbol id="icon-play" viewBox="0 0 24 24"><path class="icon-fill" d="m9 7 8 5-8 5z"/></symbol>
+    <symbol id="icon-forward" viewBox="0 0 24 24"><path d="m14 8 4 4-4 4V8ZM6 8l4 4-4 4V8Z"/></symbol>
+    <symbol id="icon-volume" viewBox="0 0 24 24"><path d="M4.5 10h3l4-3.5v11l-4-3.5h-3zM15 9.25a4 4 0 0 1 0 5.5M17.5 7a7 7 0 0 1 0 10"/></symbol>
+    <symbol id="icon-download" viewBox="0 0 24 24"><path d="M12 4v11m0 0 4-4m-4 4-4-4M5 19.5h14"/></symbol>
+    <symbol id="icon-close" viewBox="0 0 24 24"><path d="m7 7 10 10M17 7 7 17"/></symbol>
+    <symbol id="icon-upload" viewBox="0 0 24 24"><path d="M12 16V5m0 0L8 9m4-4 4 4M5 15.5v3h14v-3"/></symbol>
+    <symbol id="icon-log-out" viewBox="0 0 24 24"><path d="M10 5H5v14h5M14.5 8.5 18 12l-3.5 3.5M8 12h10"/></symbol>
+  </svg>
+
+  <div class="ambient" aria-hidden="true">
+    <div class="glow glow-one"></div>
+    <div class="glow glow-two"></div>
+    <div class="noise"></div>
+  </div>
 
   <section id="login-view" class="login-view hidden">
     <form id="login-form" class="login-card">
-      <div class="logo-wave" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div>
-      <p class="eyebrow">Gratefulness · Internal</p>
-      <h1>Narration Studio</h1>
-      <p class="subtle">A focused workspace for turning published stories into reviewed narration.</p>
-      <label>
+      <div class="login-mark">
+        <div class="logo-wave" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div>
+      </div>
+      <div class="login-intro">
+        <p class="eyebrow">Gratefulness <span aria-hidden="true">&middot;</span> Internal</p>
+        <h1>Your stories,<br><em>beautifully voiced.</em></h1>
+        <p class="subtle">A focused workspace for turning published stories into reviewed narration.</p>
+      </div>
+      <label class="field-group">
         <span>Dashboard code</span>
-        <input id="login-code" type="password" autocomplete="current-password" required>
+        <input id="login-code" type="password" autocomplete="current-password" placeholder="Enter your access code" required>
       </label>
       <button class="button primary wide" type="submit">Enter Studio</button>
       <p id="login-error" class="error-line" role="alert"></p>
@@ -29,21 +70,33 @@
   <div id="studio-shell" class="shell hidden">
     <aside class="sidebar">
       <div class="brand">
-        <div class="logo-wave compact" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div>
-        <div><strong>Narration</strong><span>Studio</span></div>
+        <div class="brand-mark">
+          <div class="logo-wave compact" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div>
+        </div>
+        <div class="brand-copy"><strong>Narration</strong><span>Studio</span></div>
       </div>
 
-      <nav>
-        <button class="nav-item active" data-view="posts"><b>◫</b><span>Ghost Posts</span></button>
-        <button class="nav-item" data-view="voices"><b>◉</b><span>Voices</span></button>
+      <div class="nav-label">Workspace</div>
+      <nav aria-label="Studio navigation">
+        <button class="nav-item active" data-view="posts" aria-label="Ghost Posts">
+          <b class="nav-icon"><svg class="icon" aria-hidden="true"><use href="#icon-posts"></use></svg></b>
+          <span>Ghost Posts</span>
+        </button>
+        <button class="nav-item" data-view="voices" aria-label="Voices">
+          <b class="nav-icon"><svg class="icon" aria-hidden="true"><use href="#icon-voices"></use></svg></b>
+          <span>Voices</span>
+        </button>
       </nav>
 
       <div class="sidebar-foot">
-        <div id="runtime-chip" class="runtime-chip">
-          <span class="dot"></span>
-          <div><strong>Studio ready</strong><small>Narration processing</small></div>
+        <div class="sidebar-note">
+          <span class="sidebar-note-icon"><svg class="icon" aria-hidden="true"><use href="#icon-sparkles"></use></svg></span>
+          <div><strong>Creative workspace</strong><span>Shape every story with care.</span></div>
         </div>
-        <button id="logout-button" class="text-button">Sign out</button>
+        <button id="logout-button" class="text-button sidebar-signout" aria-label="Sign out">
+          <svg class="icon" aria-hidden="true"><use href="#icon-log-out"></use></svg>
+          <span>Sign out</span>
+        </button>
       </div>
     </aside>
 
@@ -54,8 +107,10 @@
           <h2 id="page-title">Published posts</h2>
         </div>
         <div class="top-actions">
-          <span class="safe-chip">Internal Studio</span>
-          <button id="refresh-button" class="icon-button" title="Refresh" aria-label="Refresh">↻</button>
+          <span class="workspace-chip"><svg class="icon" aria-hidden="true"><use href="#icon-sparkles"></use></svg>Internal workspace</span>
+          <button id="refresh-button" class="icon-button" title="Refresh" aria-label="Refresh">
+            <svg class="icon" aria-hidden="true"><use href="#icon-refresh"></use></svg>
+          </button>
         </div>
       </header>
 
@@ -63,52 +118,100 @@
 
       <section id="posts-view" class="view">
         <div class="hero">
-          <div>
-            <p class="eyebrow">Team narration workbench</p>
+          <div class="hero-copy">
+            <p class="eyebrow hero-eyebrow"><span class="eyebrow-dot"></span>Team narration workbench</p>
             <h1>Pick a story.<br><em>Give it a voice.</em></h1>
             <p>Choose a published story, review its narration text, and create the audio version your team wants.</p>
+          </div>
+
+          <div class="hero-console" aria-hidden="true">
+            <div class="console-head">
+              <div>
+                <span class="console-kicker">Audio workflow</span>
+                <strong>From story to sound</strong>
+              </div>
+              <span class="live-pill"><i></i>Ready</span>
+            </div>
+            <div class="hero-wave">
+              <i class="hero-h-28"></i><i class="hero-h-46"></i><i class="hero-h-34"></i><i class="hero-h-72"></i>
+              <i class="hero-h-52"></i><i class="hero-h-88"></i><i class="hero-h-62"></i><i class="hero-h-100"></i>
+              <i class="hero-h-66"></i><i class="hero-h-82"></i><i class="hero-h-44"></i><i class="hero-h-70"></i>
+              <i class="hero-h-36"></i><i class="hero-h-56"></i><i class="hero-h-30"></i><i class="hero-h-42"></i>
+            </div>
+            <div class="workflow-steps">
+              <span class="is-current"><b>01</b>Story</span>
+              <i></i>
+              <span><b>02</b>Voice</span>
+              <i></i>
+              <span><b>03</b>Audio</span>
+            </div>
           </div>
         </div>
 
         <div class="toolbar">
-          <div class="search">
-            <span aria-hidden="true">⌕</span>
-            <input id="post-search" placeholder="Search published posts" aria-label="Search published posts">
+          <div class="toolbar-title">
+            <h3>Story library</h3>
+            <p>Published and ready for narration</p>
           </div>
-          <div id="post-count" class="count"></div>
+          <div class="toolbar-tools">
+            <div class="search">
+              <svg class="icon" aria-hidden="true"><use href="#icon-search"></use></svg>
+              <input id="post-search" placeholder="Search published posts" aria-label="Search published posts">
+            </div>
+            <div id="post-count" class="count"></div>
+          </div>
         </div>
 
         <div id="post-grid" class="post-grid"></div>
         <div class="pager">
-          <button id="prev-page" class="button ghost">← Previous</button>
+          <button id="prev-page" class="button ghost">
+            <svg class="icon" aria-hidden="true"><use href="#icon-arrow-left"></use></svg>
+            <span>Previous</span>
+          </button>
           <span id="page-label"></span>
-          <button id="next-page" class="button ghost">Next →</button>
+          <button id="next-page" class="button ghost">
+            <span>Next</span>
+            <svg class="icon" aria-hidden="true"><use href="#icon-arrow-right"></use></svg>
+          </button>
         </div>
       </section>
 
       <section id="voices-view" class="view hidden">
-        <div class="section-heading">
+        <div class="section-heading voices-heading">
           <div>
             <p class="eyebrow">Immutable references</p>
             <h1>Voice library</h1>
-            <p>Every new WAV creates a new voice identity.</p>
+            <p>Curate the distinct voices that bring your stories to life.</p>
           </div>
-          <button id="add-voice-button" class="button primary">+ Add voice</button>
+          <button id="add-voice-button" class="button primary">
+            <svg class="icon" aria-hidden="true"><use href="#icon-plus"></use></svg>
+            <span>Add voice</span>
+          </button>
+        </div>
+        <div class="collection-bar">
+          <span><svg class="icon" aria-hidden="true"><use href="#icon-voices"></use></svg>Reference voices</span>
+          <span class="collection-hint">Every WAV creates a new voice identity</span>
         </div>
         <div id="voice-grid" class="voice-grid"></div>
       </section>
 
       <section id="post-view" class="view hidden">
-        <button id="back-button" class="back">← Ghost Posts</button>
+        <button id="back-button" class="back">
+          <svg class="icon" aria-hidden="true"><use href="#icon-arrow-left"></use></svg>
+          <span>Ghost Posts</span>
+        </button>
 
         <div class="post-head">
           <div>
             <p id="post-meta" class="eyebrow"></p>
-            <h1 id="post-title">—</h1>
-            <a id="ghost-link" target="_blank" rel="noreferrer">Open published post ↗</a>
+            <h1 id="post-title">&mdash;</h1>
+            <a id="ghost-link" target="_blank" rel="noreferrer">
+              <span>Open published post</span>
+              <svg class="icon" aria-hidden="true"><use href="#icon-external"></use></svg>
+            </a>
           </div>
           <div id="post-runtime" class="runtime-chip large">
-            <span class="dot"></span>
+            <span class="dot runtime-icon"><svg class="icon" aria-hidden="true"><use href="#icon-sparkles"></use></svg></span>
             <div><strong>Ready to narrate</strong><small>Create a new audio version</small></div>
           </div>
         </div>
@@ -116,19 +219,26 @@
         <div class="workspace">
           <section class="panel document-panel">
             <div class="panel-head">
-              <div>
-                <p class="eyebrow">Narration text</p>
-                <h3 id="document-heading">Story narration</h3>
+              <div class="panel-title-wrap">
+                <span class="panel-icon"><svg class="icon" aria-hidden="true"><use href="#icon-file-audio"></use></svg></span>
+                <div>
+                  <p class="eyebrow">Narration text</p>
+                  <h3 id="document-heading">Story narration</h3>
+                </div>
               </div>
+              <span class="panel-tag">Preview</span>
             </div>
             <article id="document-preview" class="document-preview"></article>
           </section>
 
           <aside class="panel composer">
             <div class="panel-head">
-              <div>
-                <p class="eyebrow">New generation</p>
-                <h3>Voice intent</h3>
+              <div class="panel-title-wrap">
+                <span class="panel-icon accent"><svg class="icon" aria-hidden="true"><use href="#icon-sliders"></use></svg></span>
+                <div>
+                  <p class="eyebrow">New generation</p>
+                  <h3>Voice intent</h3>
+                </div>
               </div>
             </div>
 
@@ -140,7 +250,7 @@
               <label>
                 <span>Quotes</span>
                 <select id="quote-mode">
-                  <option value="preserve">Preserve — narrator voice</option>
+                  <option value="preserve">Preserve &mdash; narrator voice</option>
                   <option value="exclude">Exclude quotes</option>
                   <option value="two_voice">Use second voice</option>
                 </select>
@@ -151,16 +261,14 @@
               </label>
 
               <div id="execution-note" class="execution-note">
-                <span class="dot"></span>
+                <span class="dot note-icon"><svg class="icon" aria-hidden="true"><use href="#icon-sparkles"></use></svg></span>
                 <div>
                   <strong>Create a fresh narration.</strong>
                   <p>Your selections are pinned to this audio version so you can compare it with later generations.</p>
                 </div>
               </div>
 
-              <button id="generate-button" class="button primary wide" type="submit">
-                Generate audio
-              </button>
+              <button id="generate-button" class="button primary wide" type="submit">Generate audio</button>
             </form>
           </aside>
         </div>
@@ -187,14 +295,21 @@
   <!-- Persistent player dock: appears once anything is played, survives view switches -->
   <div id="player-bar" class="player-bar hidden" role="region" aria-label="Audio player">
     <div class="player-info">
-      <span id="player-kind" class="player-kind">Generation</span>
-      <strong id="player-title">—</strong>
+      <span class="playing-indicator" aria-hidden="true"><i></i><i></i><i></i></span>
+      <div>
+        <span id="player-kind" class="player-kind">Generation</span>
+        <strong id="player-title">&mdash;</strong>
+      </div>
     </div>
 
     <div class="player-transport">
-      <button id="player-back" class="player-btn" aria-label="Back 10 seconds">−10</button>
-      <button id="player-toggle" class="player-btn play" aria-label="Play">▶</button>
-      <button id="player-forward" class="player-btn" aria-label="Forward 10 seconds">+10</button>
+      <button id="player-back" class="player-btn" aria-label="Back 10 seconds" title="Back 10 seconds">
+        <svg class="icon" aria-hidden="true"><use href="#icon-rewind"></use></svg><small>10</small>
+      </button>
+      <button id="player-toggle" class="player-btn play" aria-label="Play">&#9654;</button>
+      <button id="player-forward" class="player-btn" aria-label="Forward 10 seconds" title="Forward 10 seconds">
+        <svg class="icon" aria-hidden="true"><use href="#icon-forward"></use></svg><small>10</small>
+      </button>
     </div>
 
     <div class="player-scrub">
@@ -208,12 +323,16 @@
     </div>
 
     <div class="player-extra">
-      <button id="player-speed" class="player-chip" aria-label="Playback speed">1×</button>
-      <button id="player-mute" class="player-btn ghost-btn" aria-label="Mute">◑</button>
+      <button id="player-speed" class="player-chip" aria-label="Playback speed">1&times;</button>
+      <button id="player-mute" class="player-btn ghost-btn" aria-label="Mute" title="Mute">&#9681;</button>
       <input id="player-volume" class="player-volume" type="range" min="0" max="100" value="100" aria-label="Volume">
-      <a id="player-download" class="player-btn ghost-btn" download title="Download" aria-label="Download audio">⇩</a>
+      <a id="player-download" class="player-btn ghost-btn" download title="Download" aria-label="Download audio">
+        <svg class="icon" aria-hidden="true"><use href="#icon-download"></use></svg>
+      </a>
       <button id="player-link" class="player-link" title="Copy link to this take">Copy link</button>
-      <button id="player-close" class="player-btn ghost-btn" aria-label="Close player">×</button>
+      <button id="player-close" class="player-btn ghost-btn" aria-label="Close player" title="Close player">
+        <svg class="icon" aria-hidden="true"><use href="#icon-close"></use></svg>
+      </button>
     </div>
 
     <audio id="player-audio" preload="metadata"></audio>
@@ -222,25 +341,31 @@
   <dialog id="voice-dialog">
     <form id="voice-form" method="dialog">
       <div class="dialog-head">
-        <div><p class="eyebrow">New voice identity</p><h2>Add reference</h2></div>
-        <button class="dialog-close" value="cancel" formnovalidate aria-label="Close">×</button>
+        <div class="dialog-title-wrap">
+          <span class="dialog-icon"><svg class="icon" aria-hidden="true"><use href="#icon-voices"></use></svg></span>
+          <div><p class="eyebrow">New voice identity</p><h2>Add reference</h2></div>
+        </div>
+        <button class="dialog-close" value="cancel" formnovalidate aria-label="Close">
+          <svg class="icon" aria-hidden="true"><use href="#icon-close"></use></svg>
+        </button>
       </div>
       <label>
         <span>Display name</span>
-        <input id="voice-name" maxlength="160" placeholder="Preeti — warm editorial" required>
+        <input id="voice-name" maxlength="160" placeholder="Asuna &mdash; warm editorial" required>
       </label>
       <label class="dropzone" for="voice-file">
         <span>Reference WAV</span>
         <div class="dropzone-area" id="dropzone-area">
+          <span class="upload-icon"><svg class="icon" aria-hidden="true"><use href="#icon-upload"></use></svg></span>
           <p class="dropzone-hint" id="dropzone-hint">Drag a WAV here, or <span class="dropzone-browse">browse</span></p>
           <p id="dropzone-filename" class="dropzone-filename hidden"></p>
         </div>
         <input id="voice-file" type="file" accept=".wav,audio/wav" required class="visually-hidden">
-        <small>WAV only · maximum 10 MB</small>
+        <small>WAV only <span aria-hidden="true">&middot;</span> maximum 10 MB</small>
       </label>
       <div class="dialog-actions">
         <button class="button ghost" value="cancel" formnovalidate>Cancel</button>
-        <button class="button primary" value="default">Create voice</button>
+        <button class="button primary create-voice-submit" value="default">Create voice</button>
       </div>
     </form>
   </dialog>
