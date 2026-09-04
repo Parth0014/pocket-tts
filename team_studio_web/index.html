@@ -14,7 +14,7 @@
   <section id="login-view" class="login-view hidden">
     <form id="login-form" class="login-card">
       <div class="logo-wave" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div>
-      <p class="eyebrow">GRATEFULNESS · INTERNAL</p>
+      <p class="eyebrow">Gratefulness · Internal</p>
       <h1>Narration Studio</h1>
       <p class="subtle">A focused workspace for turning published stories into reviewed narration.</p>
       <label>
@@ -22,7 +22,7 @@
         <input id="login-code" type="password" autocomplete="current-password" required>
       </label>
       <button class="button primary wide" type="submit">Enter Studio</button>
-      <p id="login-error" class="error-line"></p>
+      <p id="login-error" class="error-line" role="alert"></p>
     </form>
   </section>
 
@@ -50,21 +50,21 @@
     <main>
       <header class="topbar">
         <div>
-          <p id="crumb" class="eyebrow">GHOST CONTENT</p>
+          <p id="crumb" class="eyebrow">Ghost content</p>
           <h2 id="page-title">Published posts</h2>
         </div>
         <div class="top-actions">
           <span class="safe-chip">Internal Studio</span>
-          <button id="refresh-button" class="icon-button" title="Refresh">↻</button>
+          <button id="refresh-button" class="icon-button" title="Refresh" aria-label="Refresh">↻</button>
         </div>
       </header>
 
-      <div id="toast" class="toast hidden"></div>
+      <div id="toast" class="toast hidden" role="status"></div>
 
       <section id="posts-view" class="view">
         <div class="hero">
           <div>
-            <p class="eyebrow">TEAM NARRATION WORKBENCH</p>
+            <p class="eyebrow">Team narration workbench</p>
             <h1>Pick a story.<br><em>Give it a voice.</em></h1>
             <p>Choose a published story, review its narration text, and create the audio version your team wants.</p>
           </div>
@@ -72,8 +72,8 @@
 
         <div class="toolbar">
           <div class="search">
-            <span>⌕</span>
-            <input id="post-search" placeholder="Search published posts">
+            <span aria-hidden="true">⌕</span>
+            <input id="post-search" placeholder="Search published posts" aria-label="Search published posts">
           </div>
           <div id="post-count" class="count"></div>
         </div>
@@ -89,7 +89,7 @@
       <section id="voices-view" class="view hidden">
         <div class="section-heading">
           <div>
-            <p class="eyebrow">IMMUTABLE REFERENCES</p>
+            <p class="eyebrow">Immutable references</p>
             <h1>Voice library</h1>
             <p>Every new WAV creates a new voice identity.</p>
           </div>
@@ -117,7 +117,7 @@
           <section class="panel document-panel">
             <div class="panel-head">
               <div>
-                <p class="eyebrow">NARRATION TEXT</p>
+                <p class="eyebrow">Narration text</p>
                 <h3 id="document-heading">Story narration</h3>
               </div>
             </div>
@@ -127,10 +127,9 @@
           <aside class="panel composer">
             <div class="panel-head">
               <div>
-                <p class="eyebrow">NEW GENERATION</p>
+                <p class="eyebrow">New generation</p>
                 <h3>Voice intent</h3>
               </div>
-              <span class="dev-pill">DEV</span>
             </div>
 
             <form id="generation-form">
@@ -168,29 +167,75 @@
 
         <div class="generation-header">
           <div>
-            <p class="eyebrow">AUDIO HISTORY</p>
+            <p class="eyebrow">Audio history</p>
             <h3>Generations</h3>
           </div>
-          <span id="generation-count" class="count"></span>
+          <div class="generation-header-actions">
+            <div id="compare-tray" class="compare-tray hidden">
+              <span class="compare-label">Comparing</span>
+              <div id="compare-chips" class="compare-chips"></div>
+              <button id="compare-clear" class="text-button">Clear</button>
+            </div>
+            <span id="generation-count" class="count"></span>
+          </div>
         </div>
         <div id="generation-list" class="generation-list"></div>
       </section>
     </main>
   </div>
 
+  <!-- Persistent player dock: appears once anything is played, survives view switches -->
+  <div id="player-bar" class="player-bar hidden" role="region" aria-label="Audio player">
+    <div class="player-info">
+      <span id="player-kind" class="player-kind">Generation</span>
+      <strong id="player-title">—</strong>
+    </div>
+
+    <div class="player-transport">
+      <button id="player-back" class="player-btn" aria-label="Back 10 seconds">−10</button>
+      <button id="player-toggle" class="player-btn play" aria-label="Play">▶</button>
+      <button id="player-forward" class="player-btn" aria-label="Forward 10 seconds">+10</button>
+    </div>
+
+    <div class="player-scrub">
+      <span id="player-current" class="player-time">0:00</span>
+      <div id="player-waveform" class="waveform" role="slider" tabindex="0"
+           aria-label="Seek" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+        <div class="bars-bg" id="waveform-bg"></div>
+        <div class="bars-fg" id="waveform-fg"></div>
+      </div>
+      <span id="player-duration" class="player-time">0:00</span>
+    </div>
+
+    <div class="player-extra">
+      <button id="player-speed" class="player-chip" aria-label="Playback speed">1×</button>
+      <button id="player-mute" class="player-btn ghost-btn" aria-label="Mute">◑</button>
+      <input id="player-volume" class="player-volume" type="range" min="0" max="100" value="100" aria-label="Volume">
+      <a id="player-download" class="player-btn ghost-btn" download title="Download" aria-label="Download audio">⇩</a>
+      <button id="player-link" class="player-link" title="Copy link to this take">Copy link</button>
+      <button id="player-close" class="player-btn ghost-btn" aria-label="Close player">×</button>
+    </div>
+
+    <audio id="player-audio" preload="metadata"></audio>
+  </div>
+
   <dialog id="voice-dialog">
     <form id="voice-form" method="dialog">
       <div class="dialog-head">
-        <div><p class="eyebrow">NEW VOICE IDENTITY</p><h2>Add reference</h2></div>
-        <button class="dialog-close" value="cancel" formnovalidate>×</button>
+        <div><p class="eyebrow">New voice identity</p><h2>Add reference</h2></div>
+        <button class="dialog-close" value="cancel" formnovalidate aria-label="Close">×</button>
       </div>
       <label>
         <span>Display name</span>
         <input id="voice-name" maxlength="160" placeholder="Preeti — warm editorial" required>
       </label>
-      <label>
+      <label class="dropzone" for="voice-file">
         <span>Reference WAV</span>
-        <input id="voice-file" type="file" accept=".wav,audio/wav" required>
+        <div class="dropzone-area" id="dropzone-area">
+          <p class="dropzone-hint" id="dropzone-hint">Drag a WAV here, or <span class="dropzone-browse">browse</span></p>
+          <p id="dropzone-filename" class="dropzone-filename hidden"></p>
+        </div>
+        <input id="voice-file" type="file" accept=".wav,audio/wav" required class="visually-hidden">
         <small>WAV only · maximum 10 MB</small>
       </label>
       <div class="dialog-actions">

@@ -35,20 +35,27 @@ def test_generation_enqueue_remains_owned_by_existing_app_api():
     assert "EXECUTION_ENABLED" in source
 
 
-def test_frontend_is_team_post_workflow_not_manual_room_workflow():
+def test_frontend_keeps_team_post_workflow_contract():
     html = HTML.read_text(encoding="utf-8")
     frontend = JS.read_text(encoding="utf-8")
 
-    assert "Ghost Posts" in html
-    assert "Pick a story." in html
-    assert "Give it a voice." in html
+    # Stable product structure, not presentation copy/capitalization.
+    assert 'id="post-grid"' in html
+    assert 'id="document-preview"' in html
+    assert 'id="narrator-select"' in html
+    assert 'id="quote-mode"' in html
     assert 'id="generate-button"' in html
-    assert '"Generate audio"' in frontend
-    assert "NARRATION TEXT" in html
-    assert "AUDIO HISTORY" in html
-    assert "Import Narration Document" not in html
-    assert "Create room" not in html
+    assert 'id="generation-list"' in html
+    assert 'id="player-bar"' in html
+    assert 'id="voice-grid"' in html
 
+    # Stable behavior/backend contracts.
+    assert "/studio-api/posts" in frontend
+    assert "/studio-api/voices" in frontend
+    assert "/studio-api/runtime" in frontend
+    assert '"Generate audio"' in frontend
+    assert "data-voice-archive" in frontend
+    assert "data-audio" in frontend
 
 def test_generation_button_is_runtime_gated_for_live_studio():
     frontend = JS.read_text(encoding="utf-8")
