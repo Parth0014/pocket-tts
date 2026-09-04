@@ -491,11 +491,30 @@ def _artifact(item: dict[str, Any], name: str) -> ArtifactRef:
     return ArtifactRef(bucket=bucket, key=key, sha256=sha)
 
 
+def _document_revision_number(
+    item: dict[str, Any],
+    *,
+    default: int | None = None,
+) -> int:
+    value = item.get("revision")
+
+    if value is None:
+        value = item.get("document_revision")
+
+    if value is None:
+        if default is not None:
+            return default
+
+        raise StudioError("document revision is missing")
+
+    return int(value)
+
+
 def _revision(item: dict[str, Any]) -> StudioDocumentRevision:
     return StudioDocumentRevision(
         room_id=str(item["room_id"]),
         doc_id=str(item["doc_id"]),
-        revision=int(item.get("revision", item.get("document_revision"))),
+        revision=_document_revision_number(item),
         source_post_id=str(item["source_post_id"]),
         source_content_hash=str(item["source_content_hash"]),
         source_narration_hash=str(item["source_narration_hash"]),
@@ -541,7 +560,7 @@ def _ensure_room_document(post: dict[str, Any], document: dict[str, Any]) -> Stu
     revision_number = (
         1
         if latest is None
-        else int(latest.get("revision", latest.get("document_revision", 0)) or 0) + 1
+        else _document_revision_number(latest, default=0) + 1
     )
 
     prepared = service.import_narration_document(
