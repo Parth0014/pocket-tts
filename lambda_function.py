@@ -613,11 +613,6 @@ def _build_status_event(
     output_sha256=None,
     error_code=None,
 ):
-    if job.get("schema_version") != 1:
-        raise ValueError(
-            "status events require schema_version 1"
-        )
-
     generation_id = job["generation_id"]
     job_id = job["job_id"]
 

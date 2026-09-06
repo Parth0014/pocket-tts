@@ -268,3 +268,25 @@ def test_sqs_handler_passes_receive_count_to_worker(
     assert captured[
         "max_receive_count"
     ] == 3
+
+def test_worker_status_builder_decouples_v2_job_from_v1_status():
+    job = dict(validated())
+    job["schema_version"] = 2
+
+    event = lf._build_status_event(
+        job=job,
+        job_fingerprint="d" * 64,
+        status="RUNNING",
+        attempt=1,
+        occurred_at="2026-09-06T04:00:00Z",
+    )
+
+    assert job["schema_version"] == 2
+    assert event["schema_version"] == 1
+
+    assert (
+        validate_status_event_v1(
+            event
+        )
+        == event
+    )
