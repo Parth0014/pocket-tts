@@ -1,6 +1,6 @@
 import re
 
-from chunking import build_chunks_from_blocks, generation_settings_for
+from chunking import _split_sentences, build_chunks_from_blocks, generation_settings_for
 
 
 def _raises(expected, callback):
@@ -17,6 +17,69 @@ def _raises(expected, callback):
 
 def _word_count(text):
     return len(text.split())
+
+
+def test_sentence_boundaries_preserve_titles_initials_and_acronyms():
+    assert _split_sentences(
+        "Dr. A. B. Smith visited the U.S. Navy. He met Prof. Jones at 3.14 p.m. Then left."
+    ) == [
+        "Dr. A. B. Smith visited the U.S. Navy.",
+        "He met Prof. Jones at 3.14 p.m.",
+        "Then left.",
+    ]
+    assert _split_sentences("Bring supplies, e.g. water, etc. They matter.") == [
+        "Bring supplies, e.g. water, etc.",
+        "They matter.",
+    ]
+
+
+def test_sentence_boundaries_keep_closing_quotes_and_dialogue_attribution():
+    assert _split_sentences('\u201cReally?\u201d she asked. \u201cYes!\u201d He smiled.') == [
+        '\u201cReally?\u201d she asked.', '\u201cYes!\u201d', 'He smiled.',
+    ]
+    assert _split_sentences('He said "Go." Next came silence. (It lasted!) Then rain.') == [
+        'He said "Go."', 'Next came silence.', '(It lasted!)', 'Then rain.',
+    ]
+
+
+def test_sentence_boundaries_preserve_ellipses_and_normalize_only_whitespace():
+    text = "  He paused...\nthen continued.\tWait\u2026 what? I thought . . . no. Gone... Forever. "
+    sentences = _split_sentences(text)
+    assert sentences == [
+        "He paused... then continued.", "Wait\u2026 what?", "I thought . . . no.", "Gone...", "Forever.",
+    ]
+    assert " ".join(sentences) == re.sub(r"\s+", " ", text.strip())
+    assert _split_sentences(" \n\t ") == []
+    assert _split_sentences("A final thought without punctuation") == ["A final thought without punctuation"]
+
+
+def test_chunking_keeps_a_title_with_its_name_when_the_whole_sentence_fits():
+    text = "We arrived. Dr. Smith waited."
+    chunks = build_chunks_from_blocks(
+        _word_count, [{"block_type": "paragraph", "text": text}], budget=3
+    )
+    assert [chunk["text"] for chunk in chunks] == ["We arrived.", "Dr. Smith waited."]
+    assert [chunk["paragraph_end"] for chunk in chunks] == [False, True]
+
+
+def test_quoted_sentences_split_at_sentence_endings_before_word_fallback():
+    text = '\u201cWe must leave.\u201d Tomorrow will be better.'
+    chunks = build_chunks_from_blocks(
+        _word_count, [{"block_type": "quote", "text": text, "speaker": "Ada"}], budget=4
+    )
+    assert [chunk["text"] for chunk in chunks] == ['\u201cWe must leave.\u201d', "Tomorrow will be better."]
+    assert all(chunk["speaker"] == "Ada" for chunk in chunks)
+
+
+def test_abbreviation_heuristics_never_relax_budgets_or_drop_text():
+    text = 'Dr. A. B. Smith\tjoined the U.S. Navy. \u201cWait... really?\u201d she asked. It cost 3.14 dollars.'
+    for budget in (1, 2, 3, 5, 10, 50):
+        chunks = build_chunks_from_blocks(
+            _word_count, [{"block_type": "paragraph", "text": text}], budget=budget
+        )
+        assert all(_word_count(chunk["text"]) <= budget for chunk in chunks)
+        assert " ".join(chunk["text"] for chunk in chunks) == re.sub(r"\s+", " ", text.strip())
+        assert sum(chunk["paragraph_end"] for chunk in chunks) == 1
 
 
 def test_chunks_preserve_order_budget_and_block_metadata():

@@ -14,7 +14,9 @@ listen to output before anything touches AWS. The generation core
 from the original PocketTTS_narration.py almost unchanged.
 """
 
+import argparse
 import hashlib
+import inspect
 import json
 import os
 import re
@@ -32,7 +34,9 @@ import torch
 from pocket_tts import TTSModel, export_model_state
 
 from chunking import build_chunks_from_blocks, generation_settings_for
+from narration_quality import audio_diagnostics, boundary_kind, boundary_pause_ms, get_profile
 from narration_script import build_narration_blocks
+from reference_audio import ALGORITHM_VERSION, prepare_reference, probe_reference
 from worker_document import extract_worker_blocks
 
 # ============================================================
@@ -119,12 +123,20 @@ def build_runtime_config(base_dir, environment):
         ),
         "quote_reference_audio": resolve_config_path(quote_reference, base_dir),
         "quote_mode": environment.get("NARRATION_QUOTE_MODE", "preserve").strip().lower(),
+        "profile": environment.get("NARRATION_PROFILE", "balanced").strip().lower(),
+        "speed": float(environment.get("NARRATION_SPEED", "1.0")),
+        "reference_start_seconds": optional_float(environment.get("NARRATION_REFERENCE_START")),
+        "quote_reference_start_seconds": optional_float(environment.get("NARRATION_QUOTE_REFERENCE_START")),
         "output_dir": output_dir,
         "internal_dir": internal_dir,
         "raw_cache_dir": os.path.join(internal_dir, "raw_cache"),
         "voice_state_cache_dir": os.path.join(internal_dir, "voice_states"),
         "debug_dir": os.path.join(internal_dir, "debug"),
     }
+
+
+def optional_float(value):
+    return None if value is None or not str(value).strip() else float(value)
 
 
 def next_numbered_output_path(directory):
@@ -164,12 +176,12 @@ def reserve_numbered_output_path(directory):
 # ============================================================
 
 SEED = 1234
-MODEL_LANGUAGE = "english"
+MODEL_LANGUAGE = "english_2026-04"
 SEED_OVERRIDES = {}
 PRONUNCIATION_OVERRIDES = {}
 
 ANCHOR_SECONDS = 15
-OUTPUT_SPEED = 0.86
+OUTPUT_SPEED = 1.0
 RENDER_SPEED = OUTPUT_SPEED
 
 NARRATION_TEMP = 0.6
@@ -182,14 +194,14 @@ FRAMES_AFTER_EOS = None
 QUANTIZE = False
 RESUME = True
 
-RAW_CACHE_SCHEMA = 3
+RAW_CACHE_SCHEMA = 4
 VOICE_CACHE_SCHEMA = 2
 
 TRIM_THRESHOLD = 0.008
 TRIM_WINDOW_MS = 20
-TRIM_KEEP_END_MS = 80
+TRIM_KEEP_END_MS = 180
 EDGE_FADE_MS = 4
-TRIM_KEEP_START_MS = 100
+TRIM_KEEP_START_MS = 180
 
 SAFE_TOKEN_BUDGET = 44
 PARAGRAPH_PAUSE_MS = 700
@@ -317,10 +329,11 @@ def validate_runtime_config(config):
     if not post_path or not os.path.isfile(post_path):
         raise FileNotFoundError(f"Post HTML file not found:\n{post_path}")
 
-    if not 0.5 <= float(RENDER_SPEED) <= 2.0:
-        raise ValueError(f"RENDER_SPEED must be in [0.5, 2.0], got {RENDER_SPEED}")
+    render_speed = config.get("render_speed", RENDER_SPEED)
+    if not 0.5 <= float(render_speed) <= 2.0:
+        raise ValueError(f"render speed must be in [0.5, 2.0], got {render_speed}")
     ffmpeg_path = None
-    if float(RENDER_SPEED) != 1.0:
+    if float(render_speed) != 1.0:
         ffmpeg_path = resolve_ffmpeg()
     return ffmpeg_path
 
@@ -360,12 +373,12 @@ def validate_reference_config(config, roles):
         if not os.path.isfile(reference_path):
             raise FileNotFoundError(f"{role.capitalize()} reference audio not found:\n{reference_path}")
         try:
-            info = sf.info(reference_path)
+            info = probe_reference(reference_path)
         except Exception as exc:
             raise ValueError(
                 f"Cannot read {role} reference audio {reference_path!r}: {exc}"
             ) from exc
-        if info.frames <= 0 or info.samplerate <= 0:
+        if info["frames"] <= 0 or info["sample_rate"] <= 0:
             raise ValueError(
                 f"{role.capitalize()} reference audio is empty: {reference_path}"
             )
@@ -522,22 +535,11 @@ def find_clean_cutpoint(audio_np, sr, target_seconds, search_window_seconds=1.5)
     return best_idx
 
 
-def prepare_voice_anchor(reference_path, anchor_path):
-    """Create a short, role-specific anchor and return its stable identity."""
-    reference_audio, reference_sr = load_audio_mono(reference_path)
-    reference_np = reference_audio.squeeze(0).numpy()
-    cut_sample = find_clean_cutpoint(reference_np, reference_sr, ANCHOR_SECONDS)
-    reference_audio = reference_audio[:, :cut_sample]
-    if reference_audio.numel() == 0:
-        raise ValueError(f"Reference audio produced an empty voice anchor: {reference_path}")
-    atomic_save_audio(anchor_path, reference_audio, reference_sr, subtype="PCM_16")
-    return {
-        "source_sha256": sha256_file(reference_path),
-        "anchor_sha256": sha256_file(anchor_path),
-        "sample_rate": int(reference_sr),
-        "frames": int(reference_audio.shape[1]),
-        "duration_seconds": reference_audio.shape[1] / reference_sr,
-    }
+def prepare_voice_anchor(reference_path, anchor_path, start_seconds=None):
+    """Select and cache a contiguous reference segment from the whole upload."""
+    return prepare_reference(
+        reference_path, anchor_path, target_seconds=ANCHOR_SECONDS, start_seconds=start_seconds
+    )
 
 
 def load_or_build_voice_state(model, anchor_path, model_identity, cache_dir):
@@ -545,7 +547,7 @@ def load_or_build_voice_state(model, anchor_path, model_identity, cache_dir):
         "schema": VOICE_CACHE_SCHEMA,
         "anchor_sha256": sha256_file(anchor_path),
         "anchor_seconds_requested": ANCHOR_SECONDS,
-        "anchor_cut_algorithm": "low_energy_20ms_v1",
+        "anchor_cut_algorithm": ALGORITHM_VERSION,
         "model": model_identity,
         "quantize": QUANTIZE,
     }
@@ -600,11 +602,15 @@ def load_or_build_voice_state(model, anchor_path, model_identity, cache_dir):
 
 
 def count_tokens_for(model):
+    from pocket_tts.models.tts_model import prepare_text_prompt
+
     def _count(text):
-        try:
-            return model.flow_lm.conditioner.prepare(text).tokens.shape[1]
-        except Exception:
-            return max(1, (len(text) + 3) // 4)
+        # Match PocketTTS's own normalization before budgeting. Guessing token
+        # lengths can silently create another split inside generate_audio().
+        prepared, _ = prepare_text_prompt(
+            text, model.pad_with_spaces_for_short_inputs, model.remove_semicolons
+        )
+        return model.flow_lm.conditioner.prepare(prepared).tokens.shape[1]
     return _count
 
 
@@ -618,18 +624,20 @@ def pause_ms_for(record):
 
 
 def boundary_kind_for(record):
-    if record["paragraph_end"]:
-        return "paragraph"
-    if record["text"].rstrip()[-1:] in ".!?":
-        return "sentence"
-    return "clause"
+    return boundary_kind(record)
 
 
-def detect_activity(audio, sr, threshold=TRIM_THRESHOLD, window_ms=TRIM_WINDOW_MS):
+def detect_activity(audio, sr, threshold=None, window_ms=TRIM_WINDOW_MS):
     validate_audio_tensor(audio, sr, sr)
     values = audio.squeeze(0).detach().cpu().numpy()
     n = len(values)
     window = max(1, int(round(sr * window_ms / 1000)))
+    if threshold is None:
+        # A relative floor retains quiet delivery; this is energy detection,
+        # not a speech recognizer. Never increase the previous absolute floor.
+        frame_rms = [float(np.sqrt(np.mean(values[i:i + window].astype(np.float64) ** 2)))
+                     for i in range(0, n, window)]
+        threshold = min(TRIM_THRESHOLD, max(1e-6, float(np.percentile(frame_rms, 90)) * 0.025))
     active_start = None
     active_end = None
     for start in range(0, n, window):
@@ -645,7 +653,7 @@ def detect_activity(audio, sr, threshold=TRIM_THRESHOLD, window_ms=TRIM_WINDOW_M
 
 
 def trim_edge_silence(chunk, sr, keep_start_ms, keep_end_ms,
-                       threshold=TRIM_THRESHOLD, window_ms=TRIM_WINDOW_MS):
+                       threshold=None, window_ms=TRIM_WINDOW_MS):
     raw_activity = detect_activity(chunk, sr, threshold=threshold, window_ms=window_ms)
     n = chunk.shape[1]
     keep_start = int(round(sr * keep_start_ms / 1000))
@@ -720,7 +728,7 @@ def render_raw_chunk(raw_audio, sr, speed, temp_dir, ffmpeg_path=None):
 # 4. CHUNK + CACHE HELPERS
 # ============================================================
 
-def build_role_chunks(narration_blocks, count_tokens_by_role):
+def build_role_chunks(narration_blocks, count_tokens_by_role, budget=SAFE_TOKEN_BUDGET):
     """Chunk each role independently, then restore original document order."""
     indexed_blocks = list(enumerate(narration_blocks))
     role_of_block_index = {
@@ -737,7 +745,7 @@ def build_role_chunks(narration_blocks, count_tokens_by_role):
             continue
         role_blocks = [narration_blocks[index] for index in original_indices]
         role_chunks = build_chunks_from_blocks(
-            count_tokens_by_role[role], role_blocks, SAFE_TOKEN_BUDGET
+            count_tokens_by_role[role], role_blocks, budget
         )
         for chunk in role_chunks:
             chunk["role"] = role
@@ -748,7 +756,8 @@ def build_role_chunks(narration_blocks, count_tokens_by_role):
 
 
 def raw_generation_payload(
-    chunk_text, chunk_seed, role, temperature, model_identity, voice_identity
+    chunk_text, chunk_seed, role, temperature, model_identity, voice_identity,
+    profile=None,
 ):
     return {
         "schema": RAW_CACHE_SCHEMA,
@@ -758,11 +767,13 @@ def raw_generation_payload(
         "role": role,
         "generation": {
             "temperature": temperature,
-            "lsd_decode_steps": LSD_DECODE_STEPS,
+            "decode_steps": profile.decode_steps if profile else LSD_DECODE_STEPS,
+            "max_tokens": profile.token_budget if profile else SAFE_TOKEN_BUDGET,
             "noise_clamp": NOISE_CLAMP,
             "eos_threshold": EOS_THRESHOLD,
             "frames_after_eos": FRAMES_AFTER_EOS,
             "quantize": QUANTIZE,
+            "signal_retry_policy": "two-attempts-seed-plus-1000003-v1",
         },
         "model": model_identity,
         "voice": voice_identity,
@@ -801,6 +812,37 @@ def load_raw_cache(payload, expected_sr, cache_dir):
     return audio, None, key, wav_path, manifest_path
 
 
+def generate_checked_chunk(model, voice_state, text, seed, token_budget):
+    """Retry one broken signal with a deterministic alternate seed.
+
+    Model/tool exceptions propagate immediately. Only invalid returned signals
+    are retried; these checks cannot judge the performance or recognize words.
+    """
+    rejected = []
+    for attempt in range(2):
+        attempt_seed = seed + attempt * 1_000_003
+        torch.manual_seed(attempt_seed)
+        audio = model.generate_audio(
+            voice_state, text, frames_after_eos=FRAMES_AFTER_EOS,
+            copy_state=True, max_tokens=token_budget,
+        )
+        try:
+            if audio is None or audio.numel() == 0:
+                raise ValueError("Model returned no audio")
+            audio = audio.detach().cpu()
+            if audio.dim() == 1:
+                audio = audio.unsqueeze(0)
+            validate_audio_tensor(audio, model.sample_rate, model.sample_rate)
+            quality = audio_diagnostics(audio.numpy(), model.sample_rate, text)
+        except ValueError as exc:
+            rejected.append({"seed": attempt_seed, "reason": str(exc)})
+            print(f"  Signal check rejected attempt {attempt + 1}: {exc}")
+            continue
+        quality.update({"generation_seed": attempt_seed, "rejected_attempts": rejected})
+        return audio, quality
+    raise RuntimeError(f"Audio failed signal checks twice: {rejected}. Review the reference and text.")
+
+
 # ============================================================
 # 5. PIPELINE ENTRY POINT
 # ============================================================
@@ -811,24 +853,37 @@ def run_pipeline(
     quote_mode="preserve",
     output_dir=None,
     speed: float = 1.0,
+    *,
+    profile="balanced",
+    reference_start_seconds=None,
+    quote_reference_start_seconds=None,
+    seed=SEED,
+    max_chunks=None,
 ):
+    """Generate local audio and an audit report; shared by CLI and AWS worker.
+
+    All configuration is per-call. Profiles are audition starting points;
+    this engine has no instruction-based emotion control.
+    """
     # Narration pace multiplier validation
+    if isinstance(speed, bool):
+        raise ValueError("speed must be a numeric pace multiplier")
     speed = float(speed)
     if speed not in {0.80, 0.82, 0.84, 0.86, 0.88, 0.90, 0.92, 0.94, 0.96, 0.98, 1.00}:
         raise ValueError(
             "speed must be one of: 0.80, 0.82, 0.84, 0.86, 0.88, 0.90, 0.92, 0.94, 0.96, 0.98, 1.00"
         )
-    """
-    Run the complete narration pipeline.
-
-    This is the shared entry point used by both:
-      - the local development runner
-      - the AWS Lambda worker
-
-    The pipeline itself is intentionally unaware of AWS/S3. The caller supplies
-    local filesystem paths. Lambda downloads its S3 inputs into /tmp, calls this
-    function, then uploads the resulting WAV back to S3.
-    """
+    settings = get_profile(profile)
+    if isinstance(seed, bool) or not isinstance(seed, int) or not 0 <= seed < 2**31:
+        raise ValueError("seed must be an integer in [0, 2147483647]")
+    if max_chunks is not None and (
+        isinstance(max_chunks, bool) or not isinstance(max_chunks, int) or max_chunks < 1
+    ):
+        raise ValueError("max_chunks must be a positive integer")
+    for start in (reference_start_seconds, quote_reference_start_seconds):
+        if start is not None and (isinstance(start, bool) or not np.isfinite(start) or start < 0):
+            raise ValueError("reference start must be a finite non-negative number")
+    render_speed = settings.base_speed * speed
     post_html_file = os.path.abspath(os.fspath(post_html_file))
     narration_reference_audio = os.path.abspath(
         os.fspath(narration_reference_audio)
@@ -855,6 +910,7 @@ def run_pipeline(
         "raw_cache_dir": os.path.join(internal_dir, "raw_cache"),
         "voice_state_cache_dir": os.path.join(internal_dir, "voice_states"),
         "debug_dir": os.path.join(internal_dir, "debug"),
+        "render_speed": render_speed,
     }
 
     ffmpeg_path = validate_runtime_config(config)
@@ -904,7 +960,10 @@ def run_pipeline(
     if not roles:
         raise ValueError("Narration produced no non-empty generation roles")
     references = validate_reference_config(config, roles)
-    temperatures = {"narration": NARRATION_TEMP, "quote": QUOTE_TEMP}
+    temperatures = {
+        "narration": settings.narration_temperature, "quote": settings.quote_temperature
+    }
+    print(f"Profile: {settings.name}; rendered speed: {render_speed:.0%}; seed: {seed}")
 
     # Mutate directories only after config, references, routing, and ffmpeg pass.
     for directory in (
@@ -919,23 +978,31 @@ def run_pipeline(
     anchor_paths = {}
     anchor_metadata = {}
     for role in roles:
+        start_seconds = (
+            quote_reference_start_seconds
+            if role == "quote" and config["quote_mode"] == "two_voice"
+            else reference_start_seconds
+        )
         reference_hash = sha256_file(references[role])
         anchor_key = payload_sha256({
             "source_sha256": reference_hash,
             "anchor_seconds": ANCHOR_SECONDS,
-            "cut_algorithm": "low_energy_20ms_v1",
+            "cut_algorithm": ALGORITHM_VERSION,
+            "start_seconds": start_seconds,
         })
         anchor_path = os.path.join(
             config["internal_dir"],
             f"voice_anchor_{role}_{anchor_key[:20]}.wav",
         )
-        metadata = prepare_voice_anchor(references[role], anchor_path)
+        metadata = prepare_voice_anchor(references[role], anchor_path, start_seconds)
         anchor_paths[role] = anchor_path
         anchor_metadata[role] = metadata
         print(
             f"  {role.capitalize()} reference duration: "
             f"{metadata['duration_seconds']:.2f}s (target {ANCHOR_SECONDS}s)"
         )
+        for warning in metadata.get("warnings", []):
+            print(f"  Reference note: {warning}")
     if (
         config["quote_mode"] == "two_voice"
         and "quote" in anchor_metadata
@@ -945,7 +1012,7 @@ def run_pipeline(
     ):
         raise ValueError(
             "two_voice references produced identical voice anchors; provide "
-            "recordings whose first voice-anchor segment is genuinely distinct"
+            "recordings with distinct selected voice segments"
         )
 
     print("\nPython:", sys.version.split()[0])
@@ -955,18 +1022,25 @@ def run_pipeline(
     identities = {}
     count_tokens = {}
     sample_rate = None
+    models_by_temperature = {}
     for role in roles:
         temperature = temperatures[role]
         print(f"\nLoading PocketTTS {role} model (temp={temperature})...")
         load_start = time.time()
-        model = TTSModel.load_model(
-            language=MODEL_LANGUAGE,
-            temp=temperature,
-            lsd_decode_steps=LSD_DECODE_STEPS,
-            noise_clamp=NOISE_CLAMP,
-            eos_threshold=EOS_THRESHOLD,
-            quantize=QUANTIZE,
+        # v2.1 calls this lsd_decode_steps; v3 calls it sampler_decode_steps.
+        # Inspect the supported API instead of silently upgrading dependencies.
+        step_argument = (
+            "sampler_decode_steps"
+            if "sampler_decode_steps" in inspect.signature(TTSModel.load_model).parameters
+            else "lsd_decode_steps"
         )
+        if temperature not in models_by_temperature:
+            models_by_temperature[temperature] = TTSModel.load_model(
+                language=MODEL_LANGUAGE, temp=temperature,
+                **{step_argument: settings.decode_steps},
+                noise_clamp=NOISE_CLAMP, eos_threshold=EOS_THRESHOLD, quantize=QUANTIZE,
+            )
+        model = models_by_temperature[temperature]
         print(f"  Loaded in {time.time() - load_start:.1f}s on {model.device}")
         role_sample_rate = int(model.sample_rate)
         if sample_rate is None:
@@ -994,7 +1068,9 @@ def run_pipeline(
         voice_states[role] = state
         voice_identities[role] = voice_identity
 
-    all_chunks = build_role_chunks(narration_blocks, count_tokens)
+    all_chunks = build_role_chunks(narration_blocks, count_tokens, settings.token_budget)
+    if max_chunks is not None:
+        all_chunks = all_chunks[:max_chunks]
     if not all_chunks:
         raise ValueError("Narration produced zero text chunks after tokenization")
     narration_chunk_count = sum(
@@ -1016,9 +1092,9 @@ def run_pipeline(
             f"  {index:2d}. [{record['role']:9s}] {token_count:3d} tok, "
             f"pause-after: {boundary:9s} | {record['text'][:70]}"
         )
-        if token_count > SAFE_TOKEN_BUDGET:
+        if token_count > settings.token_budget:
             print(
-                f"      NOTE: exceeds safe token budget ({SAFE_TOKEN_BUDGET}); "
+                f"      NOTE: exceeds token budget ({settings.token_budget}); "
                 "may be internally re-split by PocketTTS."
             )
 
@@ -1027,12 +1103,13 @@ def run_pipeline(
     print("=" * 72)
     generation_start = time.time()
     processed_outputs = []
+    chunk_reports = []
 
     for index, record in enumerate(all_chunks, start=1):
         role = record["role"]
         model = models[role]
         chunk_text = record["text"]
-        chunk_seed = resolved_seed(chunk_text, index)
+        chunk_seed = int(SEED_OVERRIDES.get(text_sha256(chunk_text), seed + index))
         cache_payload = raw_generation_payload(
             chunk_text,
             chunk_seed,
@@ -1040,6 +1117,7 @@ def run_pipeline(
             temperatures[role],
             identities[role],
             voice_identities[role],
+            profile=settings,
         )
         (
             audio_chunk,
@@ -1053,6 +1131,17 @@ def run_pipeline(
             config["raw_cache_dir"],
         )
 
+        cache_hit = audio_chunk is not None
+        quality = None
+        if audio_chunk is not None:
+            try:
+                quality = audio_diagnostics(audio_chunk.numpy(), model.sample_rate, chunk_text)
+                manifest = read_json(raw_manifest_path) or {}
+                quality.update(manifest.get("generation_diagnostics", {}))
+            except ValueError as exc:
+                reject_reason = str(exc)
+                audio_chunk = None
+                cache_hit = False
         if audio_chunk is not None:
             print(f"[{index}/{len(all_chunks)}] ({role}) Raw cache hit: {raw_path}")
         else:
@@ -1065,23 +1154,9 @@ def run_pipeline(
                 f"\nGenerating raw chunk {index}/{len(all_chunks)} [{role}] "
                 f" ({len(chunk_text)} chars)"
             )
-            torch.manual_seed(chunk_seed)
             try:
-                audio_chunk = model.generate_audio(
-                    voice_states[role],
-                    chunk_text,
-                    frames_after_eos=FRAMES_AFTER_EOS,
-                    copy_state=True,
-                )
-                if audio_chunk is None or audio_chunk.numel() == 0:
-                    raise RuntimeError(f"No audio generated for chunk {index}")
-                audio_chunk = audio_chunk.detach().cpu()
-                if audio_chunk.dim() == 1:
-                    audio_chunk = audio_chunk.unsqueeze(0)
-                validate_audio_tensor(
-                    audio_chunk,
-                    model.sample_rate,
-                    model.sample_rate,
+                audio_chunk, quality = generate_checked_chunk(
+                    model, voice_states[role], chunk_text, chunk_seed, settings.token_budget
                 )
                 atomic_save_audio(
                     raw_path,
@@ -1095,6 +1170,10 @@ def run_pipeline(
                         "payload": cache_payload,
                         "wav_sha256": sha256_file(raw_path),
                         "frames": int(audio_chunk.shape[1]),
+                        "generation_diagnostics": {
+                            "generation_seed": quality["generation_seed"],
+                            "rejected_attempts": quality["rejected_attempts"],
+                        },
                         "created_utc": datetime.now(timezone.utc).isoformat(),
                     },
                 )
@@ -1110,11 +1189,17 @@ def run_pipeline(
             processed = render_raw_chunk(
                 audio_chunk,
                 sr,
-                (RENDER_SPEED) * speed,
+                render_speed,
                 chunk_temp_dir,
                 ffmpeg_path=ffmpeg_path,
             )
         processed_outputs.append(processed)
+        chunk_reports.append({
+            "index": index, "role": role, "text": chunk_text, "seed": chunk_seed,
+            "block_index": record["block_index"], "boundary": boundary_kind_for(record),
+            "token_count": count_tokens[role](chunk_text), "raw_path": raw_path,
+            "cache_hit": cache_hit, "quality": quality,
+        })
         del audio_chunk
         print(f"  Ready: {raw_duration:.2f}s raw; post-processing complete")
 
@@ -1132,7 +1217,7 @@ def run_pipeline(
 
     pieces = []
     first_lead = final_chunks[0]["activity"]["start"]
-    lead_target = int(round(sr * LEAD_IN_MS / 1000))
+    lead_target = int(round(sr * settings.lead_in_ms / 1000))
     lead_zero = max(lead_target - first_lead, 0)
     if lead_zero:
         pieces.append(
@@ -1153,11 +1238,7 @@ def run_pipeline(
         right_lead = next_item["activity"]["start"]
         natural_pad = left_tail + right_lead
 
-        target_ms = pause_ms_for(record)
-        settings_this = generation_settings_for(record)
-        settings_next = generation_settings_for(all_chunks[index + 1])
-        target_ms += settings_this.get("extra_trail_pause_ms", 0)
-        target_ms += settings_next.get("extra_lead_pause_ms", 0)
+        target_ms = boundary_pause_ms(record, all_chunks[index + 1], settings)
 
         target_samples = int(round(sr * target_ms / 1000))
         inserted_zero = max(target_samples - natural_pad, 0)
@@ -1192,6 +1273,16 @@ def run_pipeline(
 
     generation_time = time.time() - generation_start
     duration = joined_audio.shape[1] / sr
+    atomic_write_json(os.path.splitext(final_output)[0] + ".json", {
+        "schema_version": 1, "profile": settings.name, "settings": settings.to_dict(),
+        "seed": seed, "speed": render_speed, "preview": max_chunks is not None,
+        "source_html_sha256": sha256_file(post_html_file),
+        "reference_anchors": anchor_metadata, "models": identities,
+        "chunks": chunk_reports, "output_sha256": sha256_file(final_output),
+        "duration_seconds": duration, "generation_seconds": generation_time,
+        "warnings": [warning for entry in chunk_reports for warning in entry["quality"]["warnings"]],
+        "assessment": "Signal validation passed; voice similarity, word accuracy and storytelling require audition.",
+    })
 
     print("\n" + "=" * 72)
     print("SUCCESS")
@@ -1206,7 +1297,7 @@ def run_pipeline(
     return final_output
 
 
-def main():
+def main(argv=None):
     """
     Local development entry point.
 
@@ -1215,13 +1306,26 @@ def main():
     """
     environment = load_runtime_environment(BASE_DIR)
     config = build_runtime_config(BASE_DIR, environment)
-
+    parser = argparse.ArgumentParser(description="Generate narration with a prepared reference and audit report.")
+    parser.add_argument("--html", default=config["post_html_file"])
+    parser.add_argument("--reference", default=config["narration_reference_audio"])
+    parser.add_argument("--quote-reference", default=config["quote_reference_audio"])
+    parser.add_argument("--quote-mode", choices=("preserve", "exclude", "two_voice"), default=config["quote_mode"])
+    parser.add_argument("--profile", choices=("faithful", "balanced", "expressive", "legacy"), default=config["profile"])
+    parser.add_argument("--speed", type=float, default=config["speed"])
+    parser.add_argument("--seed", type=int, default=SEED)
+    parser.add_argument("--reference-start", type=float, default=config["reference_start_seconds"])
+    parser.add_argument("--quote-reference-start", type=float, default=config["quote_reference_start_seconds"])
+    parser.add_argument("--max-chunks", type=int, help="Limit generation for a short preview")
+    parser.add_argument("--output-dir", default=config["output_dir"])
+    args = parser.parse_args(argv)
     return run_pipeline(
-        post_html_file=config["post_html_file"],
-        narration_reference_audio=config["narration_reference_audio"],
-        quote_reference_audio=config["quote_reference_audio"],
-        quote_mode=config["quote_mode"],
-        output_dir=config["output_dir"],
+        post_html_file=args.html, narration_reference_audio=args.reference,
+        quote_reference_audio=args.quote_reference, quote_mode=args.quote_mode,
+        output_dir=args.output_dir, profile=args.profile, speed=args.speed,
+        reference_start_seconds=args.reference_start,
+        quote_reference_start_seconds=args.quote_reference_start,
+        seed=args.seed, max_chunks=args.max_chunks,
     )
 
 

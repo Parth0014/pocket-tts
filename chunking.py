@@ -8,6 +8,22 @@ from typing import Callable, Iterable
 BASE_DIR = Path(__file__).resolve().parent
 _BLOCK_TYPES = frozenset({"paragraph", "heading", "list", "quote"})
 _CLAUSE_SPLIT_RE = re.compile(r"(?<=[,;:\-\u2013\u2014])\s+")
+_SENTENCE_END_RE = re.compile(
+    r"(?P<ending>\.(?: *\.)+|[.!?\u2026]+)(?P<closers>[\"'\u201d\u2019\u00bb)\]}]*) +(?=\S)"
+)
+_PREFIX_ABBREVIATIONS = frozenset({
+    "mr", "mrs", "ms", "dr", "prof", "rev", "hon", "sr", "jr", "st", "mt",
+    "gen", "col", "lt", "capt", "sgt", "sen", "rep", "gov", "pres",
+})
+_OTHER_ABBREVIATIONS = frozenset({
+    "etc", "vs", "approx", "dept", "fig", "no", "vol", "pp", "inc", "ltd",
+    "e.g", "i.e", "a.m", "p.m", "ph.d", "m.d", "b.sc", "m.sc",
+    "jan", "feb", "mar", "apr", "jun", "jul", "aug", "sep", "sept", "oct", "nov", "dec",
+})
+_SENTENCE_STARTERS = frozenset({
+    "I", "He", "She", "It", "We", "They", "You", "This", "That", "These", "Those",
+    "Then", "However", "Meanwhile", "Nevertheless", "Finally",
+})
 
 
 def _validated_budget(budget: int) -> int:
@@ -40,13 +56,48 @@ def _token_count(count_tokens_fn: Callable[[str], int], text: str) -> int:
 
 
 def _split_sentences(paragraph_text: str) -> list[str]:
-    """Normalize whitespace and split at ordinary sentence endings."""
+    """Find English sentence boundaries without changing spoken punctuation.
+
+    This deliberately conservative heuristic protects titles, initials, and
+    common abbreviations, and keeps lowercase dialogue attribution or ellipsis
+    continuations attached. Dotted acronyms can also end sentences: only common
+    sentence starters are recognized after them. Ambiguous cases (``U.S. Navy``
+    versus ``U.S. Congress passed ...``) may remain grouped; the token-budget
+    splitter still bounds the result. This is not a linguistic sentence parser.
+    """
     collapsed = re.sub(r"\s+", " ", paragraph_text.strip())
-    return [
-        sentence.strip()
-        for sentence in re.split(r"(?<=[.!?])\s+", collapsed)
-        if sentence.strip()
-    ]
+    sentences = []
+    start = 0
+    for match in _SENTENCE_END_RE.finditer(collapsed):
+        following = collapsed[match.end():].lstrip("\"'\u201c\u2018\u00ab([{ ")
+        next_word_match = re.match(r"\w+", following)
+        next_word = next_word_match.group() if next_word_match else ""
+        ending = match.group("ending")
+
+        if ending == ".":
+            token_match = re.search(r"([A-Za-z]+(?:\.[A-Za-z]+)*)$", collapsed[:match.start()])
+            token = token_match.group() if token_match else ""
+            if token.lower() in _PREFIX_ABBREVIATIONS:
+                continue
+            if len(token) == 1 and token.isupper():
+                continue
+            dotted_acronym = bool(re.fullmatch(r"(?:[A-Za-z]\.)+[A-Za-z]", token))
+            if dotted_acronym:
+                if token.lower() in {"e.g", "i.e"} or next_word not in _SENTENCE_STARTERS:
+                    continue
+            if token.lower() in _OTHER_ABBREVIATIONS and next_word and not next_word[0].isupper():
+                continue
+
+        # "Wait!" she said. / He paused... then continued.
+        if (match.group("closers") or ending.count(".") > 1 or "\u2026" in ending) and (
+            next_word and next_word[0].islower()
+        ):
+            continue
+        sentences.append(collapsed[start:match.end("closers")])
+        start = match.end()
+    if start < len(collapsed):
+        sentences.append(collapsed[start:])
+    return sentences
 
 
 def _raise_oversized_atomic_unit(

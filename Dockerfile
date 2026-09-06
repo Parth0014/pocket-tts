@@ -14,6 +14,8 @@ RUN pip install --no-cache-dir \
     -r requirements-lambda.txt
 
 COPY generate_narration.py .
+COPY reference_audio.py .
+COPY narration_quality.py .
 COPY lambda_function.py .
 COPY extractor.py .
 COPY narration_script.py .

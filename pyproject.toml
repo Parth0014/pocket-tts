@@ -26,9 +26,11 @@ dev = [
 
 [project.scripts]
 pocket-tts-narrate = "generate_narration:main"
+pocket-tts-reference = "reference_audio:main"
+pocket-tts-preview = "narration_preview:main"
 
 [tool.setuptools]
-py-modules = ["chunking", "extractor", "generate_narration", "narration_script", "worker_document"]
+py-modules = ["chunking", "extractor", "generate_narration", "narration_script", "worker_document", "reference_audio", "narration_quality", "narration_preview"]
 packages = ["narration_content"]
 
 [tool.pytest.ini_options]
