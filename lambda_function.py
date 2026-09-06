@@ -1372,7 +1372,16 @@ def lambda_handler(event, context):
 # Narration pace Worker V2 compatibility layer
 
 _WORKER_V1_VALIDATE_JOB = _validate_job
-_WORKER_TEMPO_PERCENTS = frozenset({80, 82, 84, 86, 88, 90, 92, 94, 96, 98, 100})
+_WORKER_NEW_TEMPO_PERCENTS = frozenset({
+    65, 67, 69, 71, 73, 75, 77, 79, 81, 83, 85,
+})
+_WORKER_LEGACY_TEMPO_PERCENTS = frozenset({
+    80, 82, 84, 86, 88, 90, 92, 94, 96, 98, 100,
+})
+_WORKER_TEMPO_PERCENTS = (
+    _WORKER_NEW_TEMPO_PERCENTS
+    | _WORKER_LEGACY_TEMPO_PERCENTS
+)
 
 
 def _validate_job(job, require_schema_v1=False):
@@ -1407,8 +1416,12 @@ def _validate_job(job, require_schema_v1=False):
         type(tempo_percent) is not int
         or tempo_percent not in _WORKER_TEMPO_PERCENTS
     ):
+        allowed = ", ".join(
+            str(tempo)
+            for tempo in sorted(_WORKER_TEMPO_PERCENTS)
+        )
         raise ValueError(
-            "tempo_percent must be one of: 80, 82, 84, 86, 88, 90, 92, 94, 96, 98, 100"
+            f"tempo_percent must be one of: {allowed}"
         )
 
     legacy = copy.deepcopy(job)

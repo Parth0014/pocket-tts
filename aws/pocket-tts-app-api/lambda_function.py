@@ -19,6 +19,7 @@ from narration_studio.dispatch import (
     StudioDispatchError,
 )
 from narration_studio.worker_contract import (
+    TEMPO_PERCENTS,
     build_worker_job_v2,
     new_job_id,
 )
@@ -503,7 +504,7 @@ def _enqueue_generation(
                 },
             )
 
-    if tempo_percent not in {80, 82, 84, 86, 88, 90, 92, 94, 96, 98, 100}:
+    if tempo_percent not in TEMPO_PERCENTS:
         return _response(
             409,
             {

@@ -354,14 +354,24 @@ def job_fingerprint(job: Mapping[str, Any]) -> str:
 
 # Narration pace Worker Contract V2 compatibility layer
 
-TEMPO_PERCENTS = frozenset({80, 82, 84, 86, 88, 90, 92, 94, 96, 98, 100})
+NEW_TEMPO_PERCENTS = frozenset({
+    65, 67, 69, 71, 73, 75, 77, 79, 81, 83, 85,
+})
+LEGACY_TEMPO_PERCENTS = frozenset({
+    80, 82, 84, 86, 88, 90, 92, 94, 96, 98, 100,
+})
+TEMPO_PERCENTS = NEW_TEMPO_PERCENTS | LEGACY_TEMPO_PERCENTS
 DEFAULT_TEMPO_PERCENT = 100
 
 
 def _require_tempo_percent(value) -> int:
     if type(value) is not int or value not in TEMPO_PERCENTS:
+        allowed = ", ".join(
+            str(tempo)
+            for tempo in sorted(TEMPO_PERCENTS)
+        )
         raise StudioContractError(
-            "tempo_percent must be one of: 80, 82, 84, 86, 88, 90, 92, 94, 96, 98, 100"
+            f"tempo_percent must be one of: {allowed}"
         )
     return value
 

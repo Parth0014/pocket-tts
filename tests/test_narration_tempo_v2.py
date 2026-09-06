@@ -4,8 +4,13 @@ from types import SimpleNamespace
 
 import pytest
 
-from narration_studio.models import GenerationRecord, StudioContractError
+from narration_studio.models import (
+    GENERATION_TEMPO_PERCENTS,
+    GenerationRecord,
+    StudioContractError,
+)
 from narration_studio.worker_contract import (
+    TEMPO_PERCENTS,
     build_worker_job_for_generation,
     build_worker_job_v1,
     build_worker_job_v2,
@@ -20,9 +25,22 @@ VOICE_ID = "voice_" + ("3" * 32)
 POST_ID = "ghostpost123"
 CONTENT_HASH = "a" * 64
 
+NEW_TEMPOS = [
+    65, 67, 69, 71, 73, 75, 77, 79, 81, 83, 85,
+]
+LEGACY_TEMPOS = [
+    80, 82, 84, 86, 88, 90, 92, 94, 96, 98, 100,
+]
+ALL_TEMPOS = NEW_TEMPOS + LEGACY_TEMPOS
+
 
 def test_generation_record_tempo_default_is_100():
     assert GenerationRecord.__dataclass_fields__["tempo_percent"].default == 100
+
+
+def test_shared_generation_record_accepts_new_and_legacy_contract():
+    assert GENERATION_TEMPO_PERCENTS == frozenset(ALL_TEMPOS)
+    assert TEMPO_PERCENTS == frozenset(ALL_TEMPOS)
 
 
 def test_v1_remains_tempo_free():
@@ -39,8 +57,8 @@ def test_v1_remains_tempo_free():
     assert validate_worker_job(job) == job
 
 
-@pytest.mark.parametrize("tempo", [80, 82, 84, 86, 88, 90, 92, 94, 96, 98, 100])
-def test_v2_accepts_frozen_tempo_steps(tempo):
+@pytest.mark.parametrize("tempo", ALL_TEMPOS)
+def test_v2_accepts_new_and_legacy_tempo_steps(tempo):
     job = build_worker_job_v2(
         job_id=JOB_ID,
         generation_id=GEN_ID,
@@ -57,7 +75,7 @@ def test_v2_accepts_frozen_tempo_steps(tempo):
 
 @pytest.mark.parametrize(
     "tempo",
-    [79, 81, 101, 100.0, "100", None, True],
+    [64, 66, 87, 89, 101, 65.0, "65", None, True],
 )
 def test_v2_rejects_invalid_tempo(tempo):
     with pytest.raises(StudioContractError):
@@ -82,7 +100,7 @@ def test_generation_builder_emits_v2_with_pinned_tempo():
         voice_id=VOICE_ID,
         quote_mode="preserve",
         quote_voice_id=None,
-        tempo_percent=96,
+        tempo_percent=75,
     )
     revision = SimpleNamespace(
         doc_id=generation.doc_id,
@@ -99,7 +117,7 @@ def test_generation_builder_emits_v2_with_pinned_tempo():
         quote_mode="preserve",
     )
     assert job["schema_version"] == 2
-    assert job["tempo_percent"] == 96
+    assert job["tempo_percent"] == 75
 
 
 
@@ -115,6 +133,7 @@ def test_app_api_reads_generation_tempo_and_builds_v2():
     assert "build_worker_job_v1" not in source
     assert 'tempo_attr = generation.get("tempo_percent")' in source
     assert 'tempo_percent = int(tempo_attr["N"])' in source
+    assert "if tempo_percent not in TEMPO_PERCENTS:" in source
     assert "tempo_percent=tempo_percent" in source
 
 
@@ -211,6 +230,8 @@ def test_worker_routes_tempo_to_render():
     ).read_text(encoding="utf-8")
 
     assert "Worker V2 compatibility layer" in worker
+    assert "_WORKER_NEW_TEMPO_PERCENTS" in worker
+    assert "_WORKER_LEGACY_TEMPO_PERCENTS" in worker
     assert (
         'speed=float(job.get("tempo_percent", 100)) / 100.0'
         in worker

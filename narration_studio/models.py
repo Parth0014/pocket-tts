@@ -273,6 +273,18 @@ class VoiceRecord:
         )
 
 
+GENERATION_NEW_TEMPO_PERCENTS = frozenset({
+    65, 67, 69, 71, 73, 75, 77, 79, 81, 83, 85,
+})
+GENERATION_LEGACY_TEMPO_PERCENTS = frozenset({
+    80, 82, 84, 86, 88, 90, 92, 94, 96, 98, 100,
+})
+GENERATION_TEMPO_PERCENTS = (
+    GENERATION_NEW_TEMPO_PERCENTS
+    | GENERATION_LEGACY_TEMPO_PERCENTS
+)
+
+
 @dataclass(frozen=True)
 class GenerationRecord:
     room_id: str
@@ -301,10 +313,14 @@ class GenerationRecord:
     def __post_init__(self) -> None:
         if (
             type(self.tempo_percent) is not int
-            or self.tempo_percent not in {80, 82, 84, 86, 88, 90, 92, 94, 96, 98, 100}
+            or self.tempo_percent not in GENERATION_TEMPO_PERCENTS
         ):
+            allowed = ", ".join(
+                str(value)
+                for value in sorted(GENERATION_TEMPO_PERCENTS)
+            )
             raise StudioContractError(
-                "tempo_percent must be one of: 80, 82, 84, 86, 88, 90, 92, 94, 96, 98, 100"
+                f"tempo_percent must be one of: {allowed}"
             )
         _require_prefixed_id(
             self.room_id,
