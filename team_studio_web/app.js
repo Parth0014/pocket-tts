@@ -144,6 +144,9 @@ function setView(name) {
   } else if (name === "voices") {
     $("#page-title").textContent = "Voices";
     stopPoll();
+  } else if (name === "references") {
+    $("#page-title").textContent = "Voice folders";
+    stopPoll();
   } else {
     $("#page-title").textContent = state.currentPost?.post?.title || "Narration";
   }

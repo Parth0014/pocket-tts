@@ -140,6 +140,10 @@
             ></b>
             <span>Voices</span>
           </button>
+        <button class="nav-item" data-view="references">
+          <svg class="icon" aria-hidden="true"><use href="#icon-voices"></use></svg>
+          <span>Voice Folders</span>
+        </button>
         </nav>
 
         <div class="sidebar-foot">
@@ -228,6 +232,12 @@
             </button>
           </div>
 
+
+
+        <div id="voice-grid" class="voice-grid"></div>
+        </section>
+
+      <section id="references-view" class="view hidden">
         <section id="reference-library-shell" class="reference-library-shell" aria-label="Reference audio folders">
           <div class="reference-library-head">
             <div>
@@ -283,10 +293,7 @@
             <div class="dialog-actions"><button type="button" class="button ghost" data-reference-close>Cancel</button><button type="submit" class="button primary">Save details</button></div>
           </form>
         </dialog>
-        <div class="collection-bar reference-all-voices-bar"><span>All reference voices</span><span class="collection-hint">Original voice registry</span></div>
-
-        <div id="voice-grid" class="voice-grid"></div>
-        </section>
+      </section>
 
         <section id="post-view" class="view hidden">
           <button id="back-button" class="back">
