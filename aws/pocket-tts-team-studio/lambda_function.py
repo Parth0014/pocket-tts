@@ -1008,13 +1008,13 @@ def _create_generation(post_id: str, body: dict[str, Any]) -> dict[str, Any]:
     voice_id = body.get("voice_id")
     quote_mode = body.get("quote_mode")
     quote_voice_id = body.get("quote_voice_id")
-    tempo_percent = body.get("tempo_percent", 100)
+    tempo_percent = body.get("tempo_percent", 85)
     if (
         type(tempo_percent) is not int
-        or tempo_percent not in {80, 82, 84, 86, 88, 90, 92, 94, 96, 98, 100}
+        or tempo_percent not in {65, 67, 69, 71, 73, 75, 77, 79, 81, 83, 85}
     ):
         raise StudioError(
-            "tempo_percent must be one of: 80, 82, 84, 86, 88, 90, 92, 94, 96, 98, 100"
+            "tempo_percent must be one of: 65, 67, 69, 71, 73, 75, 77, 79, 81, 83, 85"
         )
 
     if not isinstance(voice_id, str) or _VOICE_ID_RE.fullmatch(voice_id) is None:

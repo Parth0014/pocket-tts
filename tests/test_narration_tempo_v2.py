@@ -130,12 +130,20 @@ def test_frontend_pace_contract():
     ).read_text(encoding="utf-8")
 
     assert 'id="tempo-percent"' in html
-    assert 'min="80"' in html
-    assert 'max="100"' in html
+    assert 'min="65"' in html
+    assert 'max="85"' in html
     assert 'step="2"' in html
-    assert 'value="100"' in html
+    assert 'value="85"' in html
+    assert ">Very slow</span>" in html
+    assert ">Steady</span>" in html
+    assert ">Original</span>" in html
+    assert 'aria-valuetext="Original"' in html
+    assert '85: "Original"' in js
+    assert '100: "Natural"' in js
+    assert "LEGACY_TEMPO_LABELS" in js
     assert "tempo_percent: tempoPercent" in js
     assert "formatTempo(gen.tempo_percent ?? 100)" in js
+    assert "return TEMPO_LABELS[percent]" in js
     assert "Narration pace control" in css
     assert 'style="' not in html
 
@@ -148,7 +156,11 @@ def test_team_api_pins_and_returns_tempo():
         / "lambda_function.py"
     ).read_text(encoding="utf-8")
 
-    assert 'tempo_percent = body.get("tempo_percent", 100)' in source
+    assert 'tempo_percent = body.get("tempo_percent", 85)' in source
+    assert (
+        "65, 67, 69, 71, 73, 75, 77, 79, 81, 83, 85"
+        in source
+    )
     assert "tempo_percent=tempo_percent" in source
     assert (
         'values[-1]["tempo_percent"] = '
@@ -204,6 +216,8 @@ def test_worker_routes_tempo_to_render():
         in worker
     )
     assert "Narration pace multiplier validation" in generator
+    assert "0.65, 0.67, 0.69, 0.71, 0.73, 0.75" in generator
+    assert "legacy_speeds" in generator
     assert "* speed" in generator
 
 

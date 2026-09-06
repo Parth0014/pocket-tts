@@ -373,23 +373,23 @@
               <div class="pace-control">
                 <div class="pace-control-head">
                   <label for="tempo-percent">Narration pace</label>
-                  <output id="tempo-value" for="tempo-percent">1.00× · Natural</output>
+                  <output id="tempo-value" for="tempo-percent">Original</output>
                 </div>
                 <input
                   id="tempo-percent"
                   type="range"
-                  min="80"
-                  max="100"
+                  min="65"
+                  max="85"
                   step="2"
-                  value="100"
+                  value="85"
                   aria-label="Narration pace"
                   aria-describedby="tempo-help"
-                  aria-valuetext="1.00× · Natural"
+                  aria-valuetext="Original"
                 >
                 <div class="pace-scale" aria-hidden="true">
-                  <span>0.80×</span>
-                  <span>0.90×</span>
-                  <span>1.00×</span>
+                  <span>Very slow</span>
+                  <span>Steady</span>
+                  <span>Original</span>
                 </div>
               </div>
               <p id="tempo-help" class="pace-help">Sets the pace of new audio. Existing recordings stay unchanged.</p>

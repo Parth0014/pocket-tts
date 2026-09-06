@@ -20,6 +20,22 @@ const player = {
 const $ = (selector, root = document) => root.querySelector(selector);
 
 const TEMPO_LABELS = Object.freeze({
+  65: "Very slow",
+  67: "Slow",
+  69: "Unhurried",
+  71: "Relaxed",
+  73: "Measured",
+  75: "Steady",
+  77: "Gentle",
+  79: "Calm",
+  81: "Near original",
+  83: "Almost original",
+  85: "Original",
+});
+
+// Existing generations keep their historical pace meaning.
+// These values are display-only compatibility; new generations use 65-85.
+const LEGACY_TEMPO_LABELS = Object.freeze({
   80: "Very slow",
   82: "Slow",
   84: "Relaxed",
@@ -34,9 +50,8 @@ const TEMPO_LABELS = Object.freeze({
 });
 
 function formatTempo(value) {
-  const percent = Number(value) || 100;
-  const label = TEMPO_LABELS[percent] || "Natural";
-  return `${(percent / 100).toFixed(2)}× · ${label}`;
+  const percent = Number(value);
+  return TEMPO_LABELS[percent] || LEGACY_TEMPO_LABELS[percent] || "Original";
 }
 
 function syncTempoControl() {

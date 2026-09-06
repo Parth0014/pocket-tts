@@ -869,9 +869,18 @@ def run_pipeline(
     if isinstance(speed, bool):
         raise ValueError("speed must be a numeric pace multiplier")
     speed = float(speed)
-    if speed not in {0.80, 0.82, 0.84, 0.86, 0.88, 0.90, 0.92, 0.94, 0.96, 0.98, 1.00}:
+    allowed_speeds = {
+        0.65, 0.67, 0.69, 0.71, 0.73, 0.75,
+        0.77, 0.79, 0.81, 0.83, 0.85,
+    }
+    legacy_speeds = {
+        0.80, 0.82, 0.84, 0.86, 0.88, 0.90,
+        0.92, 0.94, 0.96, 0.98, 1.00,
+    }
+    if speed not in allowed_speeds and speed not in legacy_speeds:
         raise ValueError(
-            "speed must be one of: 0.80, 0.82, 0.84, 0.86, 0.88, 0.90, 0.92, 0.94, 0.96, 0.98, 1.00"
+            "speed must be an active Studio pace from 0.65 to 0.85 "
+            "in 0.02 steps, or a supported legacy pace"
         )
     settings = get_profile(profile)
     if isinstance(seed, bool) or not isinstance(seed, int) or not 0 <= seed < 2**31:
