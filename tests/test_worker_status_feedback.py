@@ -1,5 +1,6 @@
 import json
 import sys
+import types
 from unittest.mock import patch
 
 import lambda_function as lf
@@ -289,4 +290,128 @@ def test_worker_status_builder_decouples_v2_job_from_v1_status():
             event
         )
         == event
+    )
+
+def test_process_v2_uses_fingerprint_for_status_feedback(
+    monkeypatch,
+):
+    post_id = "a" * 24
+
+    job = {
+        "schema_version": 2,
+        "job_id": JOB_ID,
+        "generation_id": GEN_ID,
+        "post_id": post_id,
+        "content_hash": CONTENT_HASH,
+        "post": {
+            "bucket": "pocket-tts-dev-test",
+            "key": (
+                f"ghost/{post_id}/"
+                f"{CONTENT_HASH}.html"
+            ),
+        },
+        "voice": {
+            "voice_id": VOICE_ID,
+            "bucket": "pocket-tts-dev-test",
+            "key": (
+                f"voices/{VOICE_ID}/"
+                "reference.wav"
+            ),
+        },
+        "quote_mode": "preserve",
+        "tempo_percent": 94,
+        "output": {
+            "bucket": "pocket-tts-dev-test",
+            "key": (
+                f"generations/{GEN_ID}/"
+                "output.wav"
+            ),
+        },
+    }
+
+    validated_job = lf._validate_job(
+        job,
+        require_schema_v1=False,
+    )
+
+    expected_fingerprint = lf._job_fingerprint(
+        validated_job
+    )
+
+    published = []
+    uploaded = {}
+
+    fake_module = types.ModuleType(
+        "generate_narration"
+    )
+
+    def fake_pipeline(**kwargs):
+        return "fake-output.wav"
+
+    fake_module.run_pipeline = fake_pipeline
+
+    monkeypatch.setitem(
+        sys.modules,
+        "generate_narration",
+        fake_module,
+    )
+
+    monkeypatch.setattr(
+        lf,
+        "_download_s3_file",
+        lambda *args, **kwargs: None,
+    )
+
+    monkeypatch.setattr(
+        lf,
+        "_sha256_file",
+        lambda path: "e" * 64,
+    )
+
+    def fake_upload(*args, **kwargs):
+        uploaded.update(kwargs)
+        return "uploaded"
+
+    monkeypatch.setattr(
+        lf,
+        "_upload_s3_file_immutable",
+        fake_upload,
+    )
+
+    def fake_publish(**kwargs):
+        published.append(kwargs)
+
+    monkeypatch.setattr(
+        lf,
+        "_publish_generation_status",
+        fake_publish,
+    )
+
+    result = lf._process_job(
+        job,
+        require_schema_v1=False,
+        status_feedback=True,
+        receive_count=1,
+        max_receive_count=3,
+    )
+
+    assert result["status"] == "completed"
+
+    assert [
+        event["status"]
+        for event in published
+    ] == [
+        "RUNNING",
+        "COMPLETED",
+    ]
+
+    assert all(
+        event["job_fingerprint"]
+        == expected_fingerprint
+        for event in published
+    )
+
+    assert (
+        uploaded["job_fingerprint"]
+        == expected_fingerprint
     )

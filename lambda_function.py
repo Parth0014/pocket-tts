@@ -1030,15 +1030,17 @@ def _process_job(
         receive_count=receive_count,
     )
 
-    job_fingerprint = None
+    job_fingerprint = (
+        _job_fingerprint(job)
+        if job.get("schema_version") in (1, 2)
+        else None
+    )
     output_committed = False
 
     try:
         destination = job["output"]
 
         if job.get("schema_version") == 1:
-            job_fingerprint = _job_fingerprint(job)
-
             if _existing_output_matches_job(
                 destination["bucket"],
                 destination["key"],
@@ -1101,13 +1103,13 @@ def _process_job(
                     },
                 }
 
-            if status_feedback:
-                _publish_generation_status(
-                    job=job,
-                    job_fingerprint=job_fingerprint,
-                    status="RUNNING",
-                    attempt=receive_count,
-                )
+        if status_feedback:
+            _publish_generation_status(
+                job=job,
+                job_fingerprint=job_fingerprint,
+                status="RUNNING",
+                attempt=receive_count,
+            )
 
         _log(
             "loading_narration_module",
