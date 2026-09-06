@@ -252,12 +252,30 @@
           </div>
 
           <div class="workspace">
+            <div class="story-column">
             <section class="panel document-panel">
               <div class="panel-head">
                 <h3 id="document-heading">Narration text</h3>
+                <button id="document-expand" class="text-button document-expand" type="button" aria-expanded="false" aria-controls="document-preview">Expand text</button>
               </div>
-              <article id="document-preview" class="document-preview"></article>
+              <article id="document-preview" class="document-preview" tabindex="0" aria-label="Narration text"></article>
             </section>
+
+            <section class="history-section" aria-labelledby="audio-history-heading">
+          <div class="generation-header">
+            <div><h3 id="audio-history-heading">Audio history</h3><p class="history-subtitle">Listen, compare, and choose your preferred take.</p></div>
+            <div class="generation-header-actions">
+              <div id="compare-tray" class="compare-tray hidden">
+                <span class="compare-label">Comparing</span>
+                <div id="compare-chips" class="compare-chips"></div>
+                <button id="compare-clear" class="text-button">Clear</button>
+              </div>
+              <span id="generation-count" class="count"></span>
+            </div>
+          </div>
+          <div id="generation-list" class="generation-list"></div>
+            </section>
+            </div>
 
             <aside class="panel composer">
               <div class="panel-head">
@@ -319,18 +337,7 @@
             </aside>
           </div>
 
-          <div class="generation-header">
-            <h3>Audio history</h3>
-            <div class="generation-header-actions">
-              <div id="compare-tray" class="compare-tray hidden">
-                <span class="compare-label">Comparing</span>
-                <div id="compare-chips" class="compare-chips"></div>
-                <button id="compare-clear" class="text-button">Clear</button>
-              </div>
-              <span id="generation-count" class="count"></span>
-            </div>
-          </div>
-          <div id="generation-list" class="generation-list"></div>
+
         </section>
       </main>
     </div>

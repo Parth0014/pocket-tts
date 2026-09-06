@@ -434,28 +434,40 @@ function generationCard(gen) {
   const review = gen.review_status || "UNREVIEWED";
   const completed = execution === "COMPLETED";
   const comparing = state.compare.includes(gen.generation_id);
+  const voice = gen.voice_name || short(gen.voice_id || "") || "Narration";
+  const quoteVoice = state.voices.find(item => item.voice_id === gen.quote_voice_id);
+  const quoteLabel = gen.quote_mode === "two_voice"
+    ? `Quotes: ${quoteVoice?.display_name || "second voice"}`
+    : gen.quote_mode === "exclude" ? "Quotes excluded" : "Narrator reads quotes";
+  const statusLabels = { COMPLETED: "Complete", QUEUED: "Queued", RUNNING: "Generating", FAILED: "Failed" };
+  const reviewLabels = { SELECTED: "Selected take", READY: "Marked ready", OUTDATED: "Outdated" };
+  const executionClass = ["COMPLETED", "QUEUED", "RUNNING", "FAILED"].includes(execution) ? execution.toLowerCase() : "pending";
+  const reviewClass = ["SELECTED", "READY", "OUTDATED"].includes(review) ? review.toLowerCase() : "unreviewed";
+  const created = new Date(gen.created_at);
+  const timestamp = Number.isNaN(created.getTime()) ? "Date unavailable" : new Intl.DateTimeFormat(undefined, {
+    month: "short", day: "numeric", hour: "numeric", minute: "2-digit",
+  }).format(created);
   return `
-    <article class="generation-card" data-generation-id="${esc(gen.generation_id)}">
-      <div>
+    <article class="generation-card review-${reviewClass}" data-generation-id="${esc(gen.generation_id)}">
+      <div class="generation-info">
         <div class="generation-title">
-          <strong>${esc(short(gen.generation_id))}</strong>
-          ${pill(execution)}
-          ${pill(review)}
+          <strong title="${esc(gen.generation_id)}">${esc(voice)}</strong>
+          <span class="take-status ${executionClass}">${esc(statusLabels[execution] || "Not queued")}</span>
+          ${reviewLabels[review] ? `<span class="take-review ${reviewClass}">${esc(reviewLabels[review])}</span>` : ""}
         </div>
         <div class="generation-meta">
-          <span>${esc(gen.voice_name || short(gen.voice_id || ""))}</span>
-          <span>quotes ${esc(gen.quote_mode || "—")}</span>
-          <span>${esc(formatTempo(gen.tempo_percent ?? 100))}</span>
-          <span>${esc(date(gen.created_at))}</span>
+          <span class="take-pace">${esc(formatTempo(gen.tempo_percent ?? 100))}</span>
+          <span>${esc(quoteLabel)}</span>
+          <time class="take-date" title="${esc(gen.created_at || "")}">${esc(timestamp)}</time>
         </div>
       </div>
-      <div class="generation-actions">
-        ${completed ? `<button class="small-button" data-audio="${esc(gen.generation_id)}">▶ Listen</button>` : ""}
-        ${completed ? `<button class="small-button ${comparing ? "is-active" : ""}" data-compare="${esc(gen.generation_id)}">${comparing ? "✓ Comparing" : "Compare"}</button>` : ""}
-        ${completed ? `<button class="small-button" data-review="SELECTED" data-gen="${esc(gen.generation_id)}">Select</button>` : ""}
-        ${review === "SELECTED" ? `<button class="small-button" data-review="READY" data-gen="${esc(gen.generation_id)}">Ready</button>` : ""}
-        ${completed ? `<button class="small-button" data-review="OUTDATED" data-gen="${esc(gen.generation_id)}">Outdate</button>` : ""}
-      </div>
+      ${completed ? `<button type="button" class="take-listen" data-audio="${esc(gen.generation_id)}" aria-label="Listen to ${esc(voice)} from ${esc(timestamp)}"><svg class="icon" aria-hidden="true"><use href="#icon-play"></use></svg><span>Listen</span></button>` : `<span class="take-waiting">${execution === "QUEUED" ? "Waiting to start" : execution === "RUNNING" ? "Creating audio?" : execution === "FAILED" ? "Audio unavailable" : "Not yet generated"}</span>`}
+      ${completed || review === "SELECTED" ? `<div class="generation-actions">
+        ${completed ? `<button type="button" class="small-button ${comparing ? "is-active" : ""}" aria-pressed="${comparing}" data-compare="${esc(gen.generation_id)}">${comparing ? "? Comparing" : "Compare"}</button>` : ""}
+        ${completed ? `<button type="button" class="small-button take-select" data-review="SELECTED" data-gen="${esc(gen.generation_id)}" ${review === "SELECTED" ? "disabled" : ""}>${review === "SELECTED" ? "? Selected" : "Select take"}</button>` : ""}
+        ${review === "SELECTED" ? `<button type="button" class="small-button" data-review="READY" data-gen="${esc(gen.generation_id)}">Mark ready</button>` : ""}
+        ${completed ? `<button type="button" class="text-button take-outdate" data-review="OUTDATED" data-gen="${esc(gen.generation_id)}" ${review === "OUTDATED" ? "disabled" : ""}>${review === "OUTDATED" ? "Outdated" : "Mark outdated"}</button>` : ""}
+      </div>` : ""}
     </article>`;
 }
 
@@ -518,6 +530,9 @@ function renderCurrentPost(payload) {
 
 async function openPost(postId) {
   state.compare = [];
+  $("#document-preview").classList.remove("is-expanded");
+  $("#document-expand").setAttribute("aria-expanded", "false");
+  $("#document-expand").textContent = "Expand text";
   const payload = await api(`/studio-api/posts/${encodeURIComponent(postId)}`);
   renderCurrentPost(payload);
   setView("post");
@@ -856,6 +871,12 @@ function resetDropzone() {
 }
 
 function bind() {
+  $("#document-expand").addEventListener("click", () => {
+    const preview = $("#document-preview");
+    const expanded = preview.classList.toggle("is-expanded");
+    $("#document-expand").setAttribute("aria-expanded", String(expanded));
+    $("#document-expand").textContent = expanded ? "Collapse text" : "Expand text";
+  });
   initSelectControls();
   initPlayer();
   bindPlayer();
