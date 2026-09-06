@@ -143,6 +143,7 @@ def _text(status: int, body: str, content_type: str) -> dict[str, Any]:
             "x-content-type-options": "nosniff",
             "content-security-policy": (
                 "default-src 'self'; "
+                "img-src 'self' data:; "
                 "style-src 'self' https://fonts.googleapis.com; "
                 "font-src https://fonts.gstatic.com; "
                 "script-src 'self'; "

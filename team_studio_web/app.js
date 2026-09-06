@@ -15,7 +15,6 @@ const player = {
   meta: null, // { id, kind: "generation" | "voice", url, title, download }
   speeds: [1, 1.25, 1.5, 1.75, 0.75],
   speedIndex: 0,
-  waveCache: new Map(),
 };
 
 const $ = (selector, root = document) => root.querySelector(selector);
@@ -45,6 +44,7 @@ function syncTempoControl() {
   const output = $("#tempo-value");
   if (!slider || !output) return;
   output.textContent = formatTempo(slider.value);
+  slider.setAttribute("aria-valuetext", output.textContent);
 }
 const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
 
@@ -137,15 +137,12 @@ function setView(name) {
   $$(".nav-item").forEach((node) => node.classList.toggle("active", node.dataset.view === name));
 
   if (name === "posts") {
-    $("#crumb").textContent = "Ghost content";
     $("#page-title").textContent = "Published posts";
     stopPoll();
   } else if (name === "voices") {
-    $("#crumb").textContent = "Voice library";
     $("#page-title").textContent = "Voices";
     stopPoll();
   } else {
-    $("#crumb").textContent = "Post workspace";
     $("#page-title").textContent = state.currentPost?.post?.title || "Narration";
   }
 }
@@ -480,51 +477,23 @@ function initPlayer() {
 // the same shape. Not decoded audio amplitude — that would need to fetch
 // and decode the full file client-side, which is fragile against signed
 // URLs with no CORS headers. Cheap, stable, and reads as a real waveform.
-function waveformBars(id) {
-  if (player.waveCache.has(id)) return player.waveCache.get(id);
-  let seed = 0;
-  for (const ch of String(id)) seed = (seed * 31 + ch.charCodeAt(0)) >>> 0;
-  const count = 64;
-  const bars = [];
-  for (let i = 0; i < count; i += 1) {
-    seed = (seed * 1103515245 + 12345) >>> 0;
-    const noise = (seed % 1000) / 1000;
-    const envelope = 0.3 + 0.7 * Math.sin((i / count) * Math.PI);
-    bars.push(Math.max(0.12, Math.min(1, noise * 0.6 + envelope * 0.55)));
-  }
-  player.waveCache.set(id, bars);
-  return bars;
-}
 
-function renderWaveform(id) {
-  const html = waveformBars(id)
-    .map((h) => `<span class="wave-bar wave-h-${Math.round(h * 100)}"></span>`)
-    .join("");
-  $("#waveform-bg").innerHTML = html;
-  $("#waveform-fg").innerHTML = html;
-}
+
+
 
 function updatePlayerProgress() {
   const a = player.audio;
   if (!a || !player.meta) return;
-  const duration = a.duration || 0;
+  const duration = Number.isFinite(a.duration) ? a.duration : 0;
   const current = a.currentTime || 0;
-  const pct = duration ? (current / duration) * 100 : 0;
-  const waveformFg = $("#waveform-fg");
-  for (const className of [...waveformFg.classList]) {
-    if (className.startsWith("wave-progress-")) {
-      waveformFg.classList.remove(className);
-    }
-  }
-  waveformFg.classList.add(`wave-progress-${Math.round(pct)}`);
-  $("#player-waveform").setAttribute("aria-valuenow", String(Math.round(pct)));
+  $("#player-progress").value = String(duration ? Math.min(100, current / duration * 100) : 0);
   $("#player-current").textContent = formatTime(current);
   $("#player-duration").textContent = formatTime(duration);
 }
 
 function setPlayerPlayingUI(isPlaying) {
   const btn = $("#player-toggle");
-  btn.textContent = isPlaying ? "❚❚" : "▶";
+  $("use", btn).setAttribute("href", isPlaying ? "#icon-pause" : "#icon-play");
   btn.setAttribute("aria-label", isPlaying ? "Pause" : "Play");
   syncPlayingHighlights();
 }
@@ -550,7 +519,7 @@ async function loadIntoPlayer({ id, kind, url, title, download }) {
   $("#player-title").textContent = title;
   $("#player-download").href = url;
   $("#player-download").setAttribute("download", download || "");
-  renderWaveform(id);
+  $("#player-progress").value = "0";
 
   if (!sameTrack) {
     a.src = url;
@@ -593,12 +562,14 @@ function setPlayerVolume(ratio) {
   player.audio.volume = ratio;
   player.audio.muted = ratio === 0;
   $("#player-mute").classList.toggle("is-muted", ratio === 0);
+  $("#player-volume-icon").setAttribute("href", ratio === 0 ? "#icon-volume-off" : "#icon-volume");
 }
 
 function togglePlayerMute() {
   const a = player.audio;
   a.muted = !a.muted;
   $("#player-mute").classList.toggle("is-muted", a.muted);
+  $("#player-volume-icon").setAttribute("href", a.muted ? "#icon-volume-off" : "#icon-volume");
 }
 
 function closePlayer() {
@@ -662,18 +633,12 @@ function bindPlayer() {
     }
   });
 
-  const waveEl = $("#player-waveform");
-  const seekFromPointer = (event) => {
-    const rect = waveEl.getBoundingClientRect();
-    seekPlayerToRatio((event.clientX - rect.left) / rect.width);
-  };
-  waveEl.addEventListener("click", seekFromPointer);
-  waveEl.addEventListener("keydown", (event) => {
-    if (event.key === "ArrowRight") { seekPlayerBy(5); event.preventDefault(); }
-    else if (event.key === "ArrowLeft") { seekPlayerBy(-5); event.preventDefault(); }
+  $("#player-progress").addEventListener("input", (event) => {
+    seekPlayerToRatio(Number(event.target.value) / 100);
   });
 
   document.addEventListener("keydown", (event) => {
+    if (document.querySelector("dialog[open]")) return;
     const tag = (event.target.tagName || "").toLowerCase();
     if (tag === "input" || tag === "select" || tag === "textarea" || event.target.isContentEditable) return;
     if (!player.meta) return;
@@ -827,7 +792,7 @@ function bind() {
       const voice = state.voices.find((item) => item.voice_id === voiceId);
       const label = voice?.display_name || voiceId;
 
-      if (!window.confirm(`Archive "${label}"? Existing generations stay pinned, but it cannot be used for new audio.`)) {
+      if (!await confirmArchive(label)) {
         return;
       }
 
@@ -863,6 +828,7 @@ function bind() {
     resetDropzone();
     $("#voice-dialog").showModal();
   });
+  $("#voice-dialog-close").addEventListener("click", () => $("#voice-dialog").close());
   $("#voice-form").addEventListener("submit", async (event) => {
     event.preventDefault();
     try {
@@ -944,3 +910,21 @@ async function bootstrap() {
 $("#tempo-percent")?.addEventListener("input", syncTempoControl);
 syncTempoControl();
 bootstrap();
+
+function confirmArchive(label) {
+  const dialog = $("#confirmation-dialog");
+  if (dialog.open) return Promise.resolve(false);
+  const trigger = document.activeElement;
+  $("#confirmation-title").textContent = "Archive voice";
+  $("#confirmation-message").textContent = `Archive "${label}"? Existing generations stay pinned, but it cannot be used for new audio.`;
+  $("#confirmation-accept").textContent = "Archive voice";
+  dialog.returnValue = "";
+  return new Promise((resolve) => {
+    dialog.addEventListener("close", () => {
+      if (trigger?.isConnected) trigger.focus();
+      resolve(dialog.returnValue === "confirm");
+    }, { once: true });
+    dialog.showModal();
+    $("#confirmation-cancel").focus();
+  });
+}

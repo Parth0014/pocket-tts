@@ -12,18 +12,18 @@ def test_team_studio_frontend_uses_no_inline_style_mutation():
 
     assert 'style="' not in app
     assert re.search(r"\\.style\\.", app) is None
-    assert "wave-h-${Math.round(h * 100)}" in app
-    assert "wave-progress-${Math.round(pct)}" in app
+    assert '$("#player-progress").value' in app
+    assert "seekPlayerToRatio(Number(event.target.value) / 100)" in app
 
 
-def test_waveform_css_has_finite_csp_safe_classes():
+def test_player_range_has_csp_safe_styles():
     css = CSS.read_text(encoding="utf-8")
-
-    assert "Team Studio CSP-safe waveform levels" in css
-    assert ".wave-h-12" in css
-    assert ".wave-h-100" in css
-    assert ".wave-progress-0" in css
-    assert ".wave-progress-100" in css
+    html = (ROOT / "team_studio_web" / "index.html").read_text(encoding="utf-8")
+    assert '.player-progress' in css
+    assert 'id="player-progress"' in html
+    assert 'type="range"' in html
+    assert 'style="' not in html
+    assert '"img-src \'self\' data:; "' in HANDLER.read_text(encoding="utf-8")
 
 
 def test_team_studio_keeps_strict_style_csp():
