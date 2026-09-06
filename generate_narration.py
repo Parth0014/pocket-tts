@@ -39,6 +39,37 @@ from narration_script import build_narration_blocks
 from reference_audio import ALGORITHM_VERSION, prepare_reference, probe_reference
 from worker_document import extract_worker_blocks
 
+
+def _restore_torch_intraop_threads(environ=None):
+    """Restore an explicit OMP thread budget after PocketTTS import."""
+    environment = os.environ if environ is None else environ
+    raw_value = environment.get("OMP_NUM_THREADS")
+
+    if raw_value is None or not str(raw_value).strip():
+        return int(torch.get_num_threads())
+
+    try:
+        thread_count = int(str(raw_value).strip())
+    except (TypeError, ValueError) as exc:
+        raise ValueError(
+            "OMP_NUM_THREADS must be a positive integer when set"
+        ) from exc
+
+    if thread_count < 1:
+        raise ValueError(
+            "OMP_NUM_THREADS must be a positive integer when set"
+        )
+
+    # PocketTTS 2.1.0 sets torch.set_num_threads(1) while importing
+    # pocket_tts.models.tts_model. Restore the explicit worker CPU budget
+    # after that import. Leave PyTorch inter-op threading unchanged.
+    torch.set_num_threads(thread_count)
+    return int(torch.get_num_threads())
+
+
+TORCH_INTRAOP_THREADS = _restore_torch_intraop_threads()
+
+
 # ============================================================
 # 1. PATHS + RUNTIME CONFIGURATION  (LOCAL TEST ONLY)
 # ============================================================
