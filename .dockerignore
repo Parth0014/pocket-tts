@@ -1,4 +1,5 @@
 __pycache__/
+/python scripts/
 *.pyc
 .pytest_cache/
 .ruff_cache/

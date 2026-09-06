@@ -340,7 +340,7 @@ def validate_worker_job_v1(job: Mapping[str, Any]) -> dict[str, Any]:
 
 def canonical_job_json(job: Mapping[str, Any]) -> str:
     return json.dumps(
-        validate_worker_job_v1(job),
+        validate_worker_job(job),
         sort_keys=True,
         separators=(",", ":"),
         ensure_ascii=False,
@@ -351,3 +351,126 @@ def job_fingerprint(job: Mapping[str, Any]) -> str:
     return hashlib.sha256(
         canonical_job_json(job).encode("utf-8")
     ).hexdigest()
+
+# Narration pace Worker Contract V2 compatibility layer
+
+TEMPO_PERCENTS = frozenset({80, 82, 84, 86, 88, 90, 92, 94, 96, 98, 100})
+DEFAULT_TEMPO_PERCENT = 100
+
+
+def _require_tempo_percent(value) -> int:
+    if type(value) is not int or value not in TEMPO_PERCENTS:
+        raise StudioContractError(
+            "tempo_percent must be one of: 80, 82, 84, 86, 88, 90, 92, 94, 96, 98, 100"
+        )
+    return value
+
+
+def validate_worker_job_v2(job: dict[str, Any]) -> dict[str, Any]:
+    if not isinstance(job, dict):
+        raise StudioContractError("worker job must be an object")
+    if job.get("schema_version") != 2:
+        raise StudioContractError("schema_version must be 2")
+
+    tempo_percent = _require_tempo_percent(job.get("tempo_percent"))
+
+    expected = {
+        "schema_version",
+        "job_id",
+        "generation_id",
+        "post_id",
+        "content_hash",
+        "post",
+        "voice",
+        "quote_mode",
+        "tempo_percent",
+        "output",
+    }
+    if job.get("quote_mode") == "two_voice":
+        expected.add("quote_voice")
+
+    if set(job) != expected:
+        raise StudioContractError(
+            "Worker V2 contains missing or unknown top-level fields"
+        )
+
+    legacy = dict(job)
+    legacy["schema_version"] = 1
+    legacy.pop("tempo_percent")
+    validated_legacy = validate_worker_job_v1(legacy)
+
+    validated = dict(validated_legacy)
+    validated["schema_version"] = 2
+    validated["tempo_percent"] = tempo_percent
+    return validated
+
+
+def validate_worker_job(job: dict[str, Any]) -> dict[str, Any]:
+    if not isinstance(job, dict):
+        raise StudioContractError("worker job must be an object")
+    schema = job.get("schema_version")
+    if schema == 1:
+        return validate_worker_job_v1(job)
+    if schema == 2:
+        return validate_worker_job_v2(job)
+    raise StudioContractError("schema_version must be 1 or 2")
+
+
+def build_worker_job_v2(
+    *,
+    job_id: str,
+    generation_id: str,
+    post_id: str,
+    content_hash: str,
+    voice_id: str,
+    quote_mode: str,
+    tempo_percent: int,
+    quote_voice_id: str | None = None,
+    bucket: str = DEV_BUCKET,
+) -> dict[str, Any]:
+    legacy = build_worker_job_v1(
+        job_id=job_id,
+        generation_id=generation_id,
+        post_id=post_id,
+        content_hash=content_hash,
+        voice_id=voice_id,
+        quote_mode=quote_mode,
+        quote_voice_id=quote_voice_id,
+        bucket=bucket,
+    )
+    job = dict(legacy)
+    job["schema_version"] = 2
+    job["tempo_percent"] = _require_tempo_percent(tempo_percent)
+    return validate_worker_job_v2(job)
+
+
+_build_worker_job_for_generation_v1 = build_worker_job_for_generation
+
+
+def build_worker_job_for_generation(
+    *,
+    job_id: str,
+    generation,
+    revision,
+    quote_mode: str,
+    quote_voice_id: str | None = None,
+    bucket: str = DEV_BUCKET,
+    tempo_percent: int | None = None,
+) -> dict[str, Any]:
+    legacy = _build_worker_job_for_generation_v1(
+        job_id=job_id,
+        generation=generation,
+        revision=revision,
+        quote_mode=quote_mode,
+        quote_voice_id=quote_voice_id,
+        bucket=bucket,
+    )
+    resolved_tempo = (
+        getattr(generation, "tempo_percent", DEFAULT_TEMPO_PERCENT)
+        if tempo_percent is None
+        else tempo_percent
+    )
+    job = dict(legacy)
+    job["schema_version"] = 2
+    job["tempo_percent"] = _require_tempo_percent(resolved_tempo)
+    return validate_worker_job_v2(job)

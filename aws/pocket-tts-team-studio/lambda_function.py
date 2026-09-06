@@ -658,6 +658,7 @@ def _generations(post_id: str) -> list[dict[str, Any]]:
                 }
             }
         )
+        values[-1]["tempo_percent"] = int(item.get("tempo_percent", 100) or 100)
         values[-1]["voice_name"] = names.get(str(item.get("voice_id")), str(item.get("voice_id", "")))
 
     values.sort(key=lambda item: str(item.get("created_at", "")), reverse=True)
@@ -682,6 +683,14 @@ def _create_generation(post_id: str, body: dict[str, Any]) -> dict[str, Any]:
     voice_id = body.get("voice_id")
     quote_mode = body.get("quote_mode")
     quote_voice_id = body.get("quote_voice_id")
+    tempo_percent = body.get("tempo_percent", 100)
+    if (
+        type(tempo_percent) is not int
+        or tempo_percent not in {80, 82, 84, 86, 88, 90, 92, 94, 96, 98, 100}
+    ):
+        raise StudioError(
+            "tempo_percent must be one of: 80, 82, 84, 86, 88, 90, 92, 94, 96, 98, 100"
+        )
 
     if not isinstance(voice_id, str) or _VOICE_ID_RE.fullmatch(voice_id) is None:
         raise StudioError("voice_id is invalid")
@@ -717,6 +726,7 @@ def _create_generation(post_id: str, body: dict[str, Any]) -> dict[str, Any]:
         quote_mode=quote_mode,
         quote_voice=quote_voice,
         created_at=_now(),
+        tempo_percent=tempo_percent,
     )
 
     _ddb.update_item(
@@ -736,6 +746,7 @@ def _create_generation(post_id: str, body: dict[str, Any]) -> dict[str, Any]:
         "generation_id": prepared.generation.generation_id,
         "review_status": prepared.generation.review_status.value,
         "generation_status": None,
+        "tempo_percent": prepared.generation.tempo_percent,
         "enqueue_path": (
             f"/rooms/{revision.room_id}/generations/"
             f"{prepared.generation.generation_id}/enqueue"

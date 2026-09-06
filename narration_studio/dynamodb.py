@@ -318,6 +318,9 @@ class DynamoStudioRepository:
             "quote_mode": _s(
                 generation.quote_mode
             ),
+            "tempo_percent": _n(
+                generation.tempo_percent
+            ),
             "generation_input_bucket": _s(
                 generation.generation_input.bucket
             ),

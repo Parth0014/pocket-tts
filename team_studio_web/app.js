@@ -19,6 +19,33 @@ const player = {
 };
 
 const $ = (selector, root = document) => root.querySelector(selector);
+
+const TEMPO_LABELS = Object.freeze({
+  80: "Very slow",
+  82: "Slow",
+  84: "Relaxed",
+  86: "Measured",
+  88: "Easy",
+  90: "Steady",
+  92: "Gentle",
+  94: "Calm",
+  96: "Near natural",
+  98: "Almost natural",
+  100: "Natural",
+});
+
+function formatTempo(value) {
+  const percent = Number(value) || 100;
+  const label = TEMPO_LABELS[percent] || "Natural";
+  return `${(percent / 100).toFixed(2)}× · ${label}`;
+}
+
+function syncTempoControl() {
+  const slider = $("#tempo-percent");
+  const output = $("#tempo-value");
+  if (!slider || !output) return;
+  output.textContent = formatTempo(slider.value);
+}
 const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
 
 function esc(value = "") {
@@ -266,6 +293,7 @@ function generationCard(gen) {
         <div class="generation-meta">
           <span>${esc(gen.voice_name || short(gen.voice_id || ""))}</span>
           <span>quotes ${esc(gen.quote_mode || "—")}</span>
+          <span>${esc(formatTempo(gen.tempo_percent ?? 100))}</span>
           <span>${esc(date(gen.created_at))}</span>
         </div>
       </div>
@@ -375,10 +403,15 @@ async function createGeneration() {
   const voiceId = $("#narrator-select").value;
   const quoteMode = $("#quote-mode").value;
   const quoteVoiceId = $("#quote-voice-select").value;
+  const tempoPercent = Number($("#tempo-percent").value);
 
   if (!postId || !voiceId) throw new Error("Choose an active narrator.");
 
-  const body = { voice_id: voiceId, quote_mode: quoteMode };
+  const body = {
+    voice_id: voiceId,
+    quote_mode: quoteMode,
+    tempo_percent: tempoPercent,
+  };
   if (quoteMode === "two_voice") {
     if (!quoteVoiceId) throw new Error("Choose a quote voice.");
     body.quote_voice_id = quoteVoiceId;
@@ -907,4 +940,7 @@ async function bootstrap() {
   try { await bootstrapData(); } catch (error) { toast(error.message, "error"); }
 }
 
+
+$("#tempo-percent")?.addEventListener("input", syncTempoControl);
+syncTempoControl();
 bootstrap();

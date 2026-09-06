@@ -260,6 +260,26 @@
                 <select id="quote-voice-select"></select>
               </label>
 
+              <div class="pace-control">
+                <div class="pace-control-head">
+                  <label for="tempo-percent">Narration pace</label>
+                  <output id="tempo-value" for="tempo-percent">1.00× · Natural</output>
+                </div>
+                <input
+                  id="tempo-percent"
+                  type="range"
+                  min="80"
+                  max="100"
+                  step="2"
+                  value="100"
+                  aria-label="Narration pace"
+                >
+                <div class="pace-scale" aria-hidden="true">
+                  <span>0.80×</span>
+                  <span>0.90×</span>
+                  <span>1.00×</span>
+                </div>
+              </div>
               <div id="execution-note" class="execution-note">
                 <span class="dot note-icon"><svg class="icon" aria-hidden="true"><use href="#icon-sparkles"></use></svg></span>
                 <div>

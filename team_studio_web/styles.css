@@ -1556,3 +1556,39 @@ dialog form { padding: 24px; display: grid; gap: 19px; }
 #waveform-fg.wave-progress-98 { width: 98%; }
 #waveform-fg.wave-progress-99 { width: 99%; }
 #waveform-fg.wave-progress-100 { width: 100%; }
+
+/* Narration pace control */
+.pace-control {
+  display: grid;
+  gap: 10px;
+  padding: 14px 0 4px;
+}
+
+.pace-control-head,
+.pace-scale {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.pace-control-head label {
+  font-weight: 650;
+}
+
+#tempo-value {
+  font-variant-numeric: tabular-nums;
+  color: var(--accent);
+  font-weight: 650;
+}
+
+#tempo-percent {
+  width: 100%;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.pace-scale {
+  color: var(--muted);
+  font-size: 0.76rem;
+}

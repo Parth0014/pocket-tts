@@ -12,7 +12,7 @@ from .worker_contract import (
     DEV_BUCKET,
     canonical_job_json,
     job_fingerprint,
-    validate_worker_job_v1,
+    validate_worker_job,
 )
 
 
@@ -83,7 +83,7 @@ class PinnedWorkerJob:
                 "pinned worker body is not JSON"
             ) from exc
 
-        validated = validate_worker_job_v1(parsed)
+        validated = validate_worker_job(parsed)
         if validated["job_id"] != self.job_id:
             raise StudioContractError("pinned job_id mismatch")
         if validated["generation_id"] != self.generation_id:
@@ -301,7 +301,7 @@ class DynamoGenerationDispatchStore:
         if not isinstance(pinned_at, str) or not pinned_at.endswith("Z"):
             raise StudioContractError("pinned_at must be UTC RFC3339 Z")
 
-        validated = validate_worker_job_v1(job)
+        validated = validate_worker_job(job)
         body = canonical_job_json(validated)
         fingerprint = job_fingerprint(validated)
         pinned = PinnedWorkerJob(

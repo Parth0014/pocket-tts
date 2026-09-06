@@ -810,7 +810,14 @@ def run_pipeline(
     quote_reference_audio=None,
     quote_mode="preserve",
     output_dir=None,
+    speed: float = 1.0,
 ):
+    # Narration pace multiplier validation
+    speed = float(speed)
+    if speed not in {0.80, 0.82, 0.84, 0.86, 0.88, 0.90, 0.92, 0.94, 0.96, 0.98, 1.00}:
+        raise ValueError(
+            "speed must be one of: 0.80, 0.82, 0.84, 0.86, 0.88, 0.90, 0.92, 0.94, 0.96, 0.98, 1.00"
+        )
     """
     Run the complete narration pipeline.
 
@@ -1103,7 +1110,7 @@ def run_pipeline(
             processed = render_raw_chunk(
                 audio_chunk,
                 sr,
-                RENDER_SPEED,
+                (RENDER_SPEED) * speed,
                 chunk_temp_dir,
                 ffmpeg_path=ffmpeg_path,
             )

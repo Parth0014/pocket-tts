@@ -42,6 +42,7 @@ The generation item pins generation-affecting inputs before enqueue:
 - source narration_hash
 - main voice identity/version/reference SHA-256
 - quote_mode
+- tempo_percent (80, 82, 84, 86, 88, 90, 92, 94, 96, 98, or 100)
 - optional quote voice identity/version/reference SHA-256
 - immutable generation input artifact
 

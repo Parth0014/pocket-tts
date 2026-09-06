@@ -119,6 +119,7 @@ class StudioService:
         quote_mode: str,
         quote_voice: VoiceRecord | None,
         created_at: str,
+        tempo_percent: int = 100,
     ) -> PreparedGeneration:
         prepared = prepare_generation_input(
             room_id=room_id,
@@ -129,6 +130,7 @@ class StudioService:
             quote_voice=quote_voice,
             bucket=self._bucket_name,
             created_at=created_at,
+            tempo_percent=tempo_percent,
         )
 
         self._artifacts.put_immutable(

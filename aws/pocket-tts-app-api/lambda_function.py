@@ -19,7 +19,7 @@ from narration_studio.dispatch import (
     StudioDispatchError,
 )
 from narration_studio.worker_contract import (
-    build_worker_job_v1,
+    build_worker_job_v2,
     new_job_id,
 )
 
@@ -488,6 +488,30 @@ def _enqueue_generation(
         "source_content_hash",
     )
 
+    tempo_attr = generation.get("tempo_percent")
+    if tempo_attr is None:
+        tempo_percent = 100
+    else:
+        try:
+            tempo_percent = int(tempo_attr["N"])
+        except (KeyError, TypeError, ValueError):
+            return _response(
+                409,
+                {
+                    "ok": False,
+                    "error": "generation tempo_percent is malformed",
+                },
+            )
+
+    if tempo_percent not in {80, 82, 84, 86, 88, 90, 92, 94, 96, 98, 100}:
+        return _response(
+            409,
+            {
+                "ok": False,
+                "error": "generation tempo_percent is invalid",
+            },
+        )
+
     if (
         source_post_id is None
         or source_content_hash is None
@@ -536,7 +560,7 @@ def _enqueue_generation(
     )
 
     if pinned is None:
-        job = build_worker_job_v1(
+        job = build_worker_job_v2(
             job_id=new_job_id(),
             generation_id=generation_id,
             post_id=source_post_id,
@@ -544,6 +568,7 @@ def _enqueue_generation(
             voice_id=voice_id,
             quote_mode=quote_mode,
             quote_voice_id=quote_voice_id,
+            tempo_percent=tempo_percent,
         )
 
         try:

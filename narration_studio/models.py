@@ -296,8 +296,16 @@ class GenerationRecord:
     version: int
     created_at: str
     updated_at: str
+    tempo_percent: int = 100
 
     def __post_init__(self) -> None:
+        if (
+            type(self.tempo_percent) is not int
+            or self.tempo_percent not in {80, 82, 84, 86, 88, 90, 92, 94, 96, 98, 100}
+        ):
+            raise StudioContractError(
+                "tempo_percent must be one of: 80, 82, 84, 86, 88, 90, 92, 94, 96, 98, 100"
+            )
         _require_prefixed_id(
             self.room_id,
             prefix="room",

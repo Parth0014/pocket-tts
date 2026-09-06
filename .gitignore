@@ -4,6 +4,7 @@
 !.env.example
 
 # Python
+/python scripts/
 __pycache__/
 *.py[cod]
 *.pyd
@@ -37,4 +38,3 @@ voice_samples/*.wav
 .vscode/
 .DS_Store
 Thumbs.db
-

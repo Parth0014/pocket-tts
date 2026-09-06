@@ -279,6 +279,7 @@ def prepare_generation_input(
     quote_voice: VoiceRecord | None,
     bucket: str,
     created_at: str,
+    tempo_percent: int = 100,
 ) -> PreparedGeneration:
     if revision.room_id != room_id:
         raise StudioContractError(
@@ -348,6 +349,7 @@ def prepare_generation_input(
             },
         },
         "quote_mode": quote_mode,
+        "tempo_percent": tempo_percent,
         "created_at": created_at,
     }
 
@@ -411,6 +413,7 @@ def prepare_generation_input(
         version=1,
         created_at=created_at,
         updated_at=created_at,
+        tempo_percent=tempo_percent,
     )
 
     metadata = {

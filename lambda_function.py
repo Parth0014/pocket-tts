@@ -1,3 +1,4 @@
+import copy
 import hashlib
 import json
 import os
@@ -1181,6 +1182,7 @@ def _process_job(
             quote_reference_audio=quote_voice_path,
             quote_mode=job["quote_mode"],
             output_dir=output_dir,
+            speed=float(job.get("tempo_percent", 100)) / 100.0,
         )
 
         output_sha256 = _sha256_file(
@@ -1369,3 +1371,57 @@ def lambda_handler(event, context):
         require_schema_v1=False,
         status_feedback=False,
     )
+
+# Narration pace Worker V2 compatibility layer
+
+_WORKER_V1_VALIDATE_JOB = _validate_job
+_WORKER_TEMPO_PERCENTS = frozenset({80, 82, 84, 86, 88, 90, 92, 94, 96, 98, 100})
+
+
+def _validate_job(job, require_schema_v1=False):
+    if not isinstance(job, dict) or job.get("schema_version") != 2:
+        return _WORKER_V1_VALIDATE_JOB(
+            job,
+            require_schema_v1=require_schema_v1,
+        )
+
+    expected = {
+        "schema_version",
+        "job_id",
+        "generation_id",
+        "post_id",
+        "content_hash",
+        "post",
+        "voice",
+        "quote_mode",
+        "tempo_percent",
+        "output",
+    }
+    if job.get("quote_mode") == "two_voice":
+        expected.add("quote_voice")
+
+    if set(job) != expected:
+        raise ValueError(
+            "Worker V2 contains missing or unknown top-level fields"
+        )
+
+    tempo_percent = job.get("tempo_percent")
+    if (
+        type(tempo_percent) is not int
+        or tempo_percent not in _WORKER_TEMPO_PERCENTS
+    ):
+        raise ValueError(
+            "tempo_percent must be one of: 80, 82, 84, 86, 88, 90, 92, 94, 96, 98, 100"
+        )
+
+    legacy = copy.deepcopy(job)
+    legacy["schema_version"] = 1
+    legacy.pop("tempo_percent")
+
+    validated = _WORKER_V1_VALIDATE_JOB(
+        legacy,
+        require_schema_v1=True,
+    )
+    validated["schema_version"] = 2
+    validated["tempo_percent"] = tempo_percent
+    return validated
