@@ -227,7 +227,65 @@
               <span>Add voice</span>
             </button>
           </div>
-          <div id="voice-grid" class="voice-grid"></div>
+
+        <section id="reference-library-shell" class="reference-library-shell" aria-label="Reference audio folders">
+          <div class="reference-library-head">
+            <div>
+              <p class="eyebrow">Saved reference audio</p>
+              <h2>Reference folders</h2>
+              <p>Create a folder, select voices, and you are done. Alias and description are optional.</p>
+            </div>
+            <button id="reference-create-folder" class="button ghost" type="button">+ New folder</button>
+          </div>
+          <div class="reference-library-layout">
+            <aside class="reference-folder-panel">
+              <div class="reference-folder-panel-title"><strong>Folders</strong><span>Shared team library</span></div>
+              <div id="reference-folder-list" class="reference-folder-list"></div>
+            </aside>
+            <section class="reference-folder-content">
+              <div class="reference-folder-header">
+                <div><p class="eyebrow">Current folder</p><h3 id="reference-folder-title">Choose a folder</h3><p id="reference-folder-count">Create a folder to start collecting reference voices.</p></div>
+                <div id="reference-folder-actions" class="reference-folder-actions hidden">
+                  <button id="reference-add-voices" class="button primary" type="button">+ Add voices</button>
+                  <button id="reference-rename-folder" class="small-button" type="button">Rename</button>
+                  <button id="reference-archive-folder" class="small-button danger-soft" type="button">Archive</button>
+                </div>
+              </div>
+              <div class="reference-toolbar">
+                <div class="search reference-search"><span aria-hidden="true">⌕</span><input id="reference-search" type="search" placeholder="Search this folder" aria-label="Search this reference folder" disabled></div>
+                <label class="reference-sort-wrap"><span>Sort</span><select id="reference-sort"><option value="name">Name A–Z</option><option value="favorite">Favorites first</option><option value="recent">Recently added</option></select></label>
+              </div>
+              <div id="reference-audio-grid" class="reference-audio-grid"><div class="reference-library-placeholder"><strong>Your saved reference voices will appear here.</strong><span>Alias and description are always optional.</span></div></div>
+            </section>
+          </div>
+        </section>
+        <dialog id="reference-folder-dialog" class="modal reference-dialog">
+          <form id="reference-folder-form" method="dialog">
+            <div class="modal-head"><div><p class="eyebrow">Reference library</p><h3 id="reference-folder-dialog-title">Create folder</h3></div><button type="button" class="icon-button" data-reference-close aria-label="Close">×</button></div>
+            <label><span>Folder name</span><input id="reference-folder-name" maxlength="80" required placeholder="e.g. Warm / Emotional"></label>
+            <p class="reference-form-hint">Only the folder name is required.</p>
+            <div class="dialog-actions"><button type="button" class="button ghost" data-reference-close>Cancel</button><button type="submit" class="button primary">Save folder</button></div>
+          </form>
+        </dialog>
+        <dialog id="reference-add-dialog" class="modal reference-dialog reference-add-dialog">
+          <form id="reference-add-form" method="dialog">
+            <div class="modal-head"><div><p class="eyebrow">Reference library</p><h3>Add voices</h3><p>Select as many voices as you want. No alias or description is required.</p></div><button type="button" class="icon-button" data-reference-close aria-label="Close">×</button></div>
+            <div id="reference-add-list" class="reference-add-list"></div>
+            <div class="dialog-actions"><button type="button" class="button ghost" data-reference-close>Cancel</button><button id="reference-add-submit" type="submit" class="button primary" disabled>Add selected voices</button></div>
+          </form>
+        </dialog>
+        <dialog id="reference-meta-dialog" class="modal reference-dialog">
+          <form id="reference-meta-form" method="dialog">
+            <div class="modal-head"><div><p class="eyebrow">Optional details</p><h3 id="reference-meta-heading">Reference voice</h3></div><button type="button" class="icon-button" data-reference-close aria-label="Close">×</button></div>
+            <label><span>Alias <small>Optional</small></span><input id="reference-alias" maxlength="80" placeholder="e.g. Phoebe — soft essay"></label>
+            <label><span>Short description <small>Optional</small></span><textarea id="reference-description" maxlength="280" rows="3" placeholder="e.g. Gentle, intimate, good for reflective pieces"></textarea></label>
+            <label class="reference-favorite-check"><input id="reference-favorite-checkbox" type="checkbox"><span>Favorite</span></label>
+            <div class="dialog-actions"><button type="button" class="button ghost" data-reference-close>Cancel</button><button type="submit" class="button primary">Save details</button></div>
+          </form>
+        </dialog>
+        <div class="collection-bar reference-all-voices-bar"><span>All reference voices</span><span class="collection-hint">Original voice registry</span></div>
+
+        <div id="voice-grid" class="voice-grid"></div>
         </section>
 
         <section id="post-view" class="view hidden">
@@ -526,5 +584,6 @@
     </dialog>
 
     <script type="module" src="/studio/app.js?v=20260906-compatible-ui"></script>
-  </body>
+    <script src="/studio/reference-library.js" defer></script>
+</body>
 </html>

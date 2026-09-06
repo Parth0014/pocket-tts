@@ -677,6 +677,330 @@ def _post_detail(post_id: str) -> dict[str, Any]:
     }
 
 
+
+# ============================================================================
+# Shared team Reference Audio Library
+# Folder name is required. Alias/short_description/favorite are optional.
+# Saved references only point at existing immutable voice IDs; no WAV is moved.
+# ============================================================================
+_REF_LIBRARY_PK = "REFLIB#TEAM"
+_REF_FOLDER_ID_RE = re.compile(r"folder_[0-9a-f]{32}")
+_REF_FOLDER_PATH = re.compile(r"^/studio-api/reference-folders/(folder_[0-9a-f]{32})$")
+_REF_FOLDER_ARCHIVE_PATH = re.compile(r"^/studio-api/reference-folders/(folder_[0-9a-f]{32})/archive$")
+_REF_FOLDER_REFERENCES_PATH = re.compile(r"^/studio-api/reference-folders/(folder_[0-9a-f]{32})/references$")
+_REF_FOLDER_REFERENCE_PATH = re.compile(
+    r"^/studio-api/reference-folders/(folder_[0-9a-f]{32})/references/(voice_[0-9a-f]{32})$"
+)
+_REF_FOLDER_REFERENCE_REMOVE_PATH = re.compile(
+    r"^/studio-api/reference-folders/(folder_[0-9a-f]{32})/references/(voice_[0-9a-f]{32})/remove$"
+)
+_ref_deserializer = TypeDeserializer()
+
+
+def _ref_decode(raw: dict[str, Any]) -> dict[str, Any]:
+    return {key: _ref_deserializer.deserialize(value) for key, value in raw.items()}
+
+
+def _ref_query(pk: str) -> list[dict[str, Any]]:
+    items: list[dict[str, Any]] = []
+    start_key = None
+    while True:
+        kwargs: dict[str, Any] = {
+            "TableName": APP_TABLE,
+            "KeyConditionExpression": "pk = :pk",
+            "ExpressionAttributeValues": {":pk": {"S": pk}},
+        }
+        if start_key is not None:
+            kwargs["ExclusiveStartKey"] = start_key
+        response = _ddb.query(**kwargs)
+        items.extend(_ref_decode(raw) for raw in response.get("Items", []))
+        start_key = response.get("LastEvaluatedKey")
+        if start_key is None:
+            return items
+
+
+def _ref_optional_text(value: Any, *, label: str, maximum: int) -> str | None:
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise StudioError(f"{label} must be text")
+    cleaned = value.strip()
+    if not cleaned:
+        return None
+    if len(cleaned) > maximum:
+        raise StudioError(f"{label} must be {maximum} characters or fewer")
+    return cleaned
+
+
+def _ref_folder_name(value: Any) -> str:
+    name = _ref_optional_text(value, label="folder_name", maximum=80)
+    if name is None:
+        raise StudioError("folder_name is required")
+    return name
+
+
+def _ref_folder_pk(folder_id: str) -> str:
+    return f"REFFOLDER#{folder_id}"
+
+
+def _ref_require_folder(folder_id: str) -> dict[str, Any]:
+    if _REF_FOLDER_ID_RE.fullmatch(folder_id) is None:
+        raise StudioError("folder_id is invalid")
+    response = _ddb.get_item(
+        TableName=APP_TABLE,
+        Key={"pk": {"S": _REF_LIBRARY_PK}, "sk": {"S": f"FOLDER#{folder_id}"}},
+        ConsistentRead=True,
+    )
+    raw = response.get("Item")
+    if raw is None:
+        raise StudioError("reference folder was not found")
+    folder = _ref_decode(raw)
+    if folder.get("status") != "ACTIVE":
+        raise StudioError("reference folder is not ACTIVE")
+    return folder
+
+
+def _ref_active_entries(folder_id: str) -> list[dict[str, Any]]:
+    return [
+        item for item in _ref_query(_ref_folder_pk(folder_id))
+        if item.get("entity_type") == "reference_audio" and item.get("status") == "ACTIVE"
+    ]
+
+
+def _ref_assert_unique_folder_name(name: str, *, ignore_folder_id: str | None = None) -> None:
+    wanted = name.casefold()
+    for item in _ref_query(_REF_LIBRARY_PK):
+        if item.get("entity_type") != "reference_folder" or item.get("status") != "ACTIVE":
+            continue
+        if ignore_folder_id == item.get("folder_id"):
+            continue
+        existing = str(item.get("folder_name") or "").strip()
+        if existing.casefold() == wanted:
+            raise StudioError(f'a reference folder named "{name}" already exists')
+
+
+def _ref_folder_public(folder: dict[str, Any], *, reference_count: int) -> dict[str, Any]:
+    return {
+        "folder_id": str(folder["folder_id"]),
+        "folder_name": str(folder["folder_name"]),
+        "reference_count": reference_count,
+        "created_at": folder.get("created_at"),
+        "updated_at": folder.get("updated_at"),
+    }
+
+
+def _reference_folders() -> dict[str, Any]:
+    folders = [
+        item for item in _ref_query(_REF_LIBRARY_PK)
+        if item.get("entity_type") == "reference_folder" and item.get("status") == "ACTIVE"
+    ]
+    folders.sort(key=lambda item: str(item.get("folder_name") or "").casefold())
+    return {
+        "items": [
+            _ref_folder_public(folder, reference_count=len(_ref_active_entries(str(folder["folder_id"]))))
+            for folder in folders
+        ]
+    }
+
+
+def _create_reference_folder(body: dict[str, Any]) -> dict[str, Any]:
+    name = _ref_folder_name(body.get("folder_name"))
+    _ref_assert_unique_folder_name(name)
+    folder_id = "folder_" + uuid.uuid4().hex
+    now = _now()
+    _ddb.put_item(
+        TableName=APP_TABLE,
+        Item={
+            "pk": {"S": _REF_LIBRARY_PK},
+            "sk": {"S": f"FOLDER#{folder_id}"},
+            "entity_type": {"S": "reference_folder"},
+            "folder_id": {"S": folder_id},
+            "folder_name": {"S": name},
+            "status": {"S": "ACTIVE"},
+            "created_at": {"S": now},
+            "updated_at": {"S": now},
+        },
+        ConditionExpression="attribute_not_exists(pk) AND attribute_not_exists(sk)",
+    )
+    return {
+        "folder_id": folder_id,
+        "folder_name": name,
+        "reference_count": 0,
+        "created_at": now,
+        "updated_at": now,
+    }
+
+
+def _reference_folder_detail(folder_id: str) -> dict[str, Any]:
+    folder = _ref_require_folder(folder_id)
+    entries = _ref_active_entries(folder_id)
+    _, voice_repository = _service()
+    references: list[dict[str, Any]] = []
+    for item in entries:
+        voice_id = str(item["voice_id"])
+        voice = voice_repository.get_voice(voice_id)
+        references.append({
+            "voice_id": voice_id,
+            "voice_display_name": (voice.display_name if voice is not None else voice_id),
+            "voice_status": (voice.status.value if voice is not None else "MISSING"),
+            "alias": item.get("alias"),
+            "short_description": item.get("short_description"),
+            "favorite": bool(item.get("favorite", False)),
+            "created_at": item.get("created_at"),
+            "updated_at": item.get("updated_at"),
+        })
+    references.sort(key=lambda item: str(item.get("alias") or item.get("voice_display_name") or item["voice_id"]).casefold())
+    return {
+        "folder": _ref_folder_public(folder, reference_count=len(references)),
+        "references": references,
+    }
+
+
+def _rename_reference_folder(folder_id: str, body: dict[str, Any]) -> dict[str, Any]:
+    _ref_require_folder(folder_id)
+    name = _ref_folder_name(body.get("folder_name"))
+    _ref_assert_unique_folder_name(name, ignore_folder_id=folder_id)
+    _ddb.update_item(
+        TableName=APP_TABLE,
+        Key={"pk": {"S": _REF_LIBRARY_PK}, "sk": {"S": f"FOLDER#{folder_id}"}},
+        ConditionExpression="#status = :active",
+        UpdateExpression="SET folder_name = :name, updated_at = :now",
+        ExpressionAttributeNames={"#status": "status"},
+        ExpressionAttributeValues={":active": {"S": "ACTIVE"}, ":name": {"S": name}, ":now": {"S": _now()}},
+    )
+    return _reference_folder_detail(folder_id)
+
+
+def _archive_reference_folder(folder_id: str) -> dict[str, Any]:
+    folder = _ref_require_folder(folder_id)
+    _ddb.update_item(
+        TableName=APP_TABLE,
+        Key={"pk": {"S": _REF_LIBRARY_PK}, "sk": {"S": f"FOLDER#{folder_id}"}},
+        ConditionExpression="#status = :active",
+        UpdateExpression="SET #status = :archived, updated_at = :now",
+        ExpressionAttributeNames={"#status": "status"},
+        ExpressionAttributeValues={":active": {"S": "ACTIVE"}, ":archived": {"S": "ARCHIVED"}, ":now": {"S": _now()}},
+    )
+    return {"folder_id": folder_id, "folder_name": folder.get("folder_name"), "archived": True}
+
+
+def _add_reference_voices(folder_id: str, body: dict[str, Any]) -> dict[str, Any]:
+    _ref_require_folder(folder_id)
+    voice_ids = body.get("voice_ids")
+    if not isinstance(voice_ids, list) or not voice_ids:
+        raise StudioError("voice_ids must contain at least one voice")
+    if len(voice_ids) > 100:
+        raise StudioError("voice_ids cannot contain more than 100 voices")
+    normalized: list[str] = []
+    for value in voice_ids:
+        if not isinstance(value, str) or _VOICE_ID_RE.fullmatch(value) is None:
+            raise StudioError("voice_ids contains an invalid voice_id")
+        if value not in normalized:
+            normalized.append(value)
+    _, voice_repository = _service()
+    for voice_id in normalized:
+        voice = voice_repository.get_voice(voice_id)
+        if voice is None:
+            raise StudioError(f"voice {voice_id} was not found")
+        if voice.status is not VoiceStatus.ACTIVE:
+            raise StudioError(f"voice {voice_id} is not ACTIVE")
+    now = _now()
+    for voice_id in normalized:
+        _ddb.update_item(
+            TableName=APP_TABLE,
+            Key={"pk": {"S": _ref_folder_pk(folder_id)}, "sk": {"S": f"VOICE#{voice_id}"}},
+            UpdateExpression=(
+                "SET entity_type = :entity, folder_id = :folder_id, voice_id = :voice_id, "
+                "#status = :active, created_at = if_not_exists(created_at, :now), updated_at = :now"
+            ),
+            ExpressionAttributeNames={"#status": "status"},
+            ExpressionAttributeValues={
+                ":entity": {"S": "reference_audio"}, ":folder_id": {"S": folder_id},
+                ":voice_id": {"S": voice_id}, ":active": {"S": "ACTIVE"}, ":now": {"S": now},
+            },
+        )
+    return _reference_folder_detail(folder_id)
+
+
+def _ref_require_reference(folder_id: str, voice_id: str) -> dict[str, Any]:
+    _ref_require_folder(folder_id)
+    if _VOICE_ID_RE.fullmatch(voice_id) is None:
+        raise StudioError("voice_id is invalid")
+    response = _ddb.get_item(
+        TableName=APP_TABLE,
+        Key={"pk": {"S": _ref_folder_pk(folder_id)}, "sk": {"S": f"VOICE#{voice_id}"}},
+        ConsistentRead=True,
+    )
+    raw = response.get("Item")
+    if raw is None:
+        raise StudioError("saved reference was not found")
+    item = _ref_decode(raw)
+    if item.get("status") != "ACTIVE":
+        raise StudioError("saved reference is not ACTIVE")
+    return item
+
+
+def _update_reference_metadata(folder_id: str, voice_id: str, body: dict[str, Any]) -> dict[str, Any]:
+    _ref_require_reference(folder_id, voice_id)
+    allowed = {"alias", "short_description", "favorite"}
+    unknown = set(body) - allowed
+    if unknown:
+        raise StudioError("unsupported reference metadata: " + ", ".join(sorted(unknown)))
+    if not body:
+        raise StudioError("reference metadata update is empty")
+    sets = ["updated_at = :now"]
+    removes: list[str] = []
+    names = {"#status": "status"}
+    values: dict[str, dict[str, Any]] = {":active": {"S": "ACTIVE"}, ":now": {"S": _now()}}
+    if "alias" in body:
+        alias = _ref_optional_text(body.get("alias"), label="alias", maximum=80)
+        names["#alias"] = "alias"
+        if alias is None:
+            removes.append("#alias")
+        else:
+            sets.append("#alias = :alias")
+            values[":alias"] = {"S": alias}
+    if "short_description" in body:
+        desc = _ref_optional_text(body.get("short_description"), label="short_description", maximum=280)
+        names["#description"] = "short_description"
+        if desc is None:
+            removes.append("#description")
+        else:
+            sets.append("#description = :description")
+            values[":description"] = {"S": desc}
+    if "favorite" in body:
+        favorite = body.get("favorite")
+        if not isinstance(favorite, bool):
+            raise StudioError("favorite must be true or false")
+        sets.append("favorite = :favorite")
+        values[":favorite"] = {"BOOL": favorite}
+    expression = "SET " + ", ".join(sets)
+    if removes:
+        expression += " REMOVE " + ", ".join(removes)
+    _ddb.update_item(
+        TableName=APP_TABLE,
+        Key={"pk": {"S": _ref_folder_pk(folder_id)}, "sk": {"S": f"VOICE#{voice_id}"}},
+        ConditionExpression="#status = :active",
+        UpdateExpression=expression,
+        ExpressionAttributeNames=names,
+        ExpressionAttributeValues=values,
+    )
+    return _reference_folder_detail(folder_id)
+
+
+def _remove_reference_voice(folder_id: str, voice_id: str) -> dict[str, Any]:
+    _ref_require_reference(folder_id, voice_id)
+    _ddb.update_item(
+        TableName=APP_TABLE,
+        Key={"pk": {"S": _ref_folder_pk(folder_id)}, "sk": {"S": f"VOICE#{voice_id}"}},
+        ConditionExpression="#status = :active",
+        UpdateExpression="SET #status = :removed, updated_at = :now",
+        ExpressionAttributeNames={"#status": "status"},
+        ExpressionAttributeValues={":active": {"S": "ACTIVE"}, ":removed": {"S": "REMOVED"}, ":now": {"S": _now()}},
+    )
+    return {"folder_id": folder_id, "voice_id": voice_id, "removed": True}
+
+
 def _create_generation(post_id: str, body: dict[str, Any]) -> dict[str, Any]:
     if not EXECUTION_ENABLED:
         raise StudioError("generation execution is currently paused")
@@ -1041,6 +1365,8 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         return _static("styles.css", "text/css")
     if method == "GET" and path == "/studio/app.js":
         return _static("app.js", "text/javascript")
+    if method == "GET" and path == "/studio/reference-library.js":
+        return _static("reference-library.js", "text/javascript")
 
     if not path.startswith("/studio-api/"):
         return _json(404, {"error": "not_found"})
@@ -1065,6 +1391,34 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
 
         if method == "POST" and path == "/studio-api/voices":
             return _json(201, _create_voice(_body(event)))
+
+        if method == "GET" and path == "/studio-api/reference-folders":
+            return _json(200, _reference_folders())
+
+        if method == "POST" and path == "/studio-api/reference-folders":
+            return _json(201, _create_reference_folder(_body(event)))
+
+        match = _REF_FOLDER_ARCHIVE_PATH.fullmatch(path)
+        if method == "POST" and match is not None:
+            return _json(200, _archive_reference_folder(match.group(1)))
+
+        match = _REF_FOLDER_REFERENCES_PATH.fullmatch(path)
+        if method == "POST" and match is not None:
+            return _json(200, _add_reference_voices(match.group(1), _body(event)))
+
+        match = _REF_FOLDER_REFERENCE_REMOVE_PATH.fullmatch(path)
+        if method == "POST" and match is not None:
+            return _json(200, _remove_reference_voice(match.group(1), match.group(2)))
+
+        match = _REF_FOLDER_REFERENCE_PATH.fullmatch(path)
+        if method == "PATCH" and match is not None:
+            return _json(200, _update_reference_metadata(match.group(1), match.group(2), _body(event)))
+
+        match = _REF_FOLDER_PATH.fullmatch(path)
+        if method == "GET" and match is not None:
+            return _json(200, _reference_folder_detail(match.group(1)))
+        if method == "PATCH" and match is not None:
+            return _json(200, _rename_reference_folder(match.group(1), _body(event)))
 
         match = _VOICE_ARCHIVE_PATH.fullmatch(path)
         if method == "POST" and match is not None:

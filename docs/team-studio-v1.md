@@ -98,3 +98,25 @@ intact for audit but do not appear in the team interface.
 
 The Voice Library displays ACTIVE voices by default. Archived/DISABLED
 registry records remain preserved but do not clutter narrator selection.
+
+## Shared Reference Audio Library
+
+Team Studio has a shared folder layer on top of the immutable voice registry.
+Folder name is the only required user-facing field. A folder can contain many
+existing ACTIVE voices. Alias, short description, and favorite are optional per
+saved reference. The same voice can be saved in multiple folders.
+
+The underlying voice ID and S3 reference WAV are never moved or duplicated.
+Folder archiving and reference removal are soft state updates rather than
+DynamoDB/S3 deletes.
+
+DynamoDB layout in `pocket-tts-app`:
+- Folder: `pk=REFLIB#TEAM`, `sk=FOLDER#folder_<id>`.
+- Saved voice: `pk=REFFOLDER#folder_<id>`, `sk=VOICE#voice_<id>`.
+
+The current dashboard-code session has no stable per-person identity, so these
+folders are intentionally shared by the Team Studio. Personal/private folders
+can be added later when team-member identity exists.
+
+This feature does not change the worker job/status contracts, TTS container,
+worker queues, or production audio paths.
