@@ -119,6 +119,7 @@ async function api(path, options = {}) {
 }
 
 function showLogin() {
+  selectControls.forEach(control => control.close());
   stopPoll();
   closePlayer();
   $("#studio-shell").classList.add("hidden");
@@ -132,6 +133,7 @@ function showStudio() {
 }
 
 function setView(name) {
+  selectControls.forEach(control => control.close());
   $$(".view").forEach((node) => node.classList.add("hidden"));
   $(`#${name}-view`).classList.remove("hidden");
   $$(".nav-item").forEach((node) => node.classList.toggle("active", node.dataset.view === name));
@@ -235,7 +237,157 @@ function voiceCard(voice) {
     </article>`;
 }
 
+// Keep the original selects as the source of truth for forms and API requests.
+const selectControls = new Map();
+
+function initSelectControls() {
+  if (selectControls.size) return;
+  ["narrator-select", "quote-voice-select", "quote-mode"].forEach((id) => {
+    const select = document.getElementById(id);
+    if (!select || selectControls.has(id)) return;
+    const searchable = id !== "quote-mode";
+    const label = select.previousElementSibling;
+    const labelText = label.textContent.trim();
+    const wrapper = document.createElement("div");
+    wrapper.className = "select-control";
+    wrapper.innerHTML = `
+      <button type="button" id="${id}-trigger" class="select-trigger" role="combobox" aria-haspopup="listbox" aria-expanded="false" aria-controls="${id}-options" aria-labelledby="${id}-label ${id}-value">
+        <span id="${id}-value" class="select-value"></span>
+        <svg class="icon" aria-hidden="true"><use href="#icon-chevron-down"></use></svg>
+      </button>
+      <div class="select-menu hidden">
+        ${searchable ? `<div class="select-search"><svg class="icon" aria-hidden="true"><use href="#icon-search"></use></svg><input type="search" autocomplete="off" placeholder="Search voices..." aria-label="Search ${labelText.toLowerCase()} options" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="${id}-options"></div>` : ""}
+        <div id="${id}-options" class="select-options" role="listbox" aria-label="${labelText}"></div>
+        <p class="select-empty hidden" role="status">No matching voices. Try another name.</p>
+        <div class="select-count" aria-live="polite"></div>
+      </div>`;
+    label.id = `${id}-label`;
+    label.htmlFor = `${id}-trigger`;
+    select.classList.add("visually-hidden");
+    select.tabIndex = -1;
+    select.setAttribute("aria-hidden", "true");
+    select.after(wrapper);
+    const trigger = wrapper.querySelector(".select-trigger");
+    const menu = wrapper.querySelector(".select-menu");
+    const search = wrapper.querySelector("input");
+    const list = wrapper.querySelector(".select-options");
+    const focusTarget = search || trigger;
+    let options = [];
+    let activeIndex = -1;
+
+    function activate(index) {
+      activeIndex = options.length ? Math.max(0, Math.min(index, options.length - 1)) : -1;
+      [...list.children].forEach((row, i) => row.classList.toggle("is-active", i === activeIndex));
+      if (activeIndex >= 0) {
+        const row = list.children[activeIndex];
+        focusTarget.setAttribute("aria-activedescendant", row.id);
+        if (!menu.classList.contains("hidden")) row.scrollIntoView({ block: "nearest" });
+      } else focusTarget.removeAttribute("aria-activedescendant");
+    }
+
+    function draw() {
+      const query = (search?.value || "").trim().toLocaleLowerCase();
+      const available = [...select.options].filter(option => option.value && !option.disabled);
+      options = available.filter(option => option.textContent.toLocaleLowerCase().includes(query));
+      list.replaceChildren();
+      options.forEach((option, index) => {
+        const row = document.createElement("div");
+        row.id = `${id}-option-${index}`;
+        row.className = "select-option";
+        row.setAttribute("role", "option");
+        row.setAttribute("aria-selected", String(option.value === select.value));
+        const name = document.createElement("span");
+        name.textContent = option.textContent;
+        row.append(name);
+        row.addEventListener("mousedown", event => event.preventDefault());
+        row.addEventListener("click", () => choose(index));
+        list.append(row);
+      });
+      wrapper.querySelector(".select-empty").classList.toggle("hidden", options.length > 0);
+      wrapper.querySelector(".select-count").textContent = searchable
+        ? `${options.length} of ${available.length} voices` : "Choose how quotes are narrated";
+      activate(Math.max(0, options.findIndex(option => option.value === select.value)));
+    }
+
+    function close(restoreFocus = false) {
+      menu.classList.add("hidden");
+      trigger.setAttribute("aria-expanded", "false");
+      search?.setAttribute("aria-expanded", "false");
+      focusTarget.removeAttribute("aria-activedescendant");
+      wrapper.classList.remove("is-open", "opens-up");
+      if (restoreFocus) trigger.focus();
+    }
+
+    function refresh() {
+      wrapper.querySelector(".select-value").textContent = select.selectedOptions[0]?.textContent || "Choose a voice";
+      trigger.disabled = select.disabled || ![...select.options].some(option => option.value && !option.disabled);
+      if (trigger.disabled) close();
+      else if (!menu.classList.contains("hidden")) draw();
+    }
+
+    function choose(index) {
+      if (!options[index]) return;
+      select.value = options[index].value;
+      close(true);
+      refresh();
+      select.dispatchEvent(new Event("change", { bubbles: true }));
+    }
+
+    function open() {
+      if (trigger.disabled) return;
+      selectControls.forEach(control => control.close());
+      if (search) search.value = "";
+      menu.classList.remove("hidden");
+      wrapper.classList.add("is-open");
+      trigger.setAttribute("aria-expanded", "true");
+      search?.setAttribute("aria-expanded", "true");
+      draw();
+      const rect = trigger.getBoundingClientRect();
+      wrapper.classList.toggle("opens-up", window.innerHeight - rect.bottom < menu.offsetHeight + 12 && rect.top > menu.offsetHeight + 12);
+      focusTarget.focus();
+    }
+
+    trigger.addEventListener("click", () => menu.classList.contains("hidden") ? open() : close());
+    search?.addEventListener("input", draw);
+    wrapper.addEventListener("keydown", event => {
+      const opened = !menu.classList.contains("hidden");
+      if (event.key === "Escape" && opened) {
+        event.preventDefault(); event.stopPropagation(); close(true);
+      } else if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+        event.preventDefault(); event.stopPropagation();
+        if (!opened) open();
+        else activate(activeIndex + (event.key === "ArrowDown" ? 1 : -1));
+      } else if (event.key === "Enter" && opened) {
+        event.preventDefault(); choose(activeIndex);
+      } else if (!search && opened && ["Home", "End"].includes(event.key)) {
+        event.preventDefault(); activate(event.key === "Home" ? 0 : options.length - 1);
+      } else if (search && event.target === trigger && event.key.length === 1 && event.key !== " " && !event.ctrlKey && !event.metaKey && !event.altKey) {
+        event.preventDefault(); open(); search.value = event.key; draw();
+      }
+    });
+    wrapper.addEventListener("focusout", event => {
+      if (!wrapper.contains(event.relatedTarget)) close();
+    });
+    document.addEventListener("pointerdown", event => {
+      if (!wrapper.contains(event.target)) close();
+    });
+    select.addEventListener("change", refresh);
+    select.addEventListener("invalid", event => { event.preventDefault(); trigger.focus(); });
+    selectControls.set(id, { close, refresh });
+    refresh();
+  });
+  let viewportWidth = window.innerWidth;
+  window.addEventListener("resize", () => {
+    // Opening a phone keyboard changes height; keep the search usable.
+    if (window.innerWidth === viewportWidth) return;
+    viewportWidth = window.innerWidth;
+    selectControls.forEach(control => control.close());
+  });
+}
+
 function renderVoices() {
+  const narratorId = $("#narrator-select").value;
+  const quoteVoiceId = $("#quote-voice-select").value;
   const active = state.voices.filter((voice) => voice.status === "ACTIVE");
 
   $("#voice-grid").innerHTML = active.length
@@ -248,6 +400,9 @@ function renderVoices() {
 
   $("#narrator-select").innerHTML = options || `<option value="">No active voices</option>`;
   $("#quote-voice-select").innerHTML = `<option value="">Choose quote voice</option>${options}`;
+  if (active.some(voice => voice.voice_id === narratorId)) $("#narrator-select").value = narratorId;
+  if (active.some(voice => voice.voice_id === quoteVoiceId)) $("#quote-voice-select").value = quoteVoiceId;
+  selectControls.forEach(control => control.refresh());
   updateRuntime();
   syncPlayingHighlights();
 }
@@ -638,7 +793,7 @@ function bindPlayer() {
   });
 
   document.addEventListener("keydown", (event) => {
-    if (document.querySelector("dialog[open]")) return;
+    if (document.querySelector('dialog[open], .select-trigger[aria-expanded="true"]')) return;
     const tag = (event.target.tagName || "").toLowerCase();
     if (tag === "input" || tag === "select" || tag === "textarea" || event.target.isContentEditable) return;
     if (!player.meta) return;
@@ -701,6 +856,7 @@ function resetDropzone() {
 }
 
 function bind() {
+  initSelectControls();
   initPlayer();
   bindPlayer();
   bindDropzone();
@@ -816,6 +972,7 @@ function bind() {
   });
 
   $("#quote-mode").addEventListener("change", () => {
+    selectControls.get("quote-voice-select")?.close();
     $("#quote-voice-wrap").classList.toggle("hidden", $("#quote-mode").value !== "two_voice");
   });
 
