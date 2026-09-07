@@ -15,6 +15,7 @@ from the original PocketTTS_narration.py almost unchanged.
 """
 
 import argparse
+from collections import OrderedDict
 import hashlib
 import inspect
 import json
@@ -68,6 +69,287 @@ def _restore_torch_intraop_threads(environ=None):
 
 
 TORCH_INTRAOP_THREADS = _restore_torch_intraop_threads()
+
+# WARM_WORKER_CACHE_V2
+#
+# Standard Lambda execution environments may be reused after an
+# invocation. These caches exploit only that normal warm reuse.
+#
+# There is intentionally:
+#   - no Provisioned Concurrency
+#   - no eager model initialization
+#   - no extra Lambda memory
+#   - no extra ephemeral-storage allocation
+#
+# The persistent disk cache is bounded so the existing 512 MB /tmp
+# allocation keeps substantial free space.
+
+_MODEL_CACHE = OrderedDict()
+_MODEL_CACHE_MAX_ENTRIES = 2
+
+_WARM_CACHE_DEFAULT_MAX_BYTES = 192 * 1024 * 1024
+
+
+def _warm_cache_root():
+    configured = os.environ.get(
+        "POCKET_TTS_WARM_CACHE_DIR"
+    )
+
+    if (
+        configured
+        and str(configured).strip()
+    ):
+        return os.path.abspath(
+            str(configured).strip()
+        )
+
+    if os.environ.get(
+        "AWS_LAMBDA_FUNCTION_NAME"
+    ):
+        return (
+            "/tmp/"
+            "pocket-tts-warm-cache-v2"
+        )
+
+    return None
+
+
+def _warm_cache_path(
+    kind,
+    fallback,
+):
+    root = _warm_cache_root()
+
+    if not root:
+        return fallback
+
+    return os.path.join(
+        root,
+        kind,
+    )
+
+
+def _warm_cache_limit_bytes():
+    raw = os.environ.get(
+        "POCKET_TTS_WARM_CACHE_MAX_BYTES"
+    )
+
+    if (
+        raw is None
+        or not str(raw).strip()
+    ):
+        return (
+            _WARM_CACHE_DEFAULT_MAX_BYTES
+        )
+
+    try:
+        value = int(
+            str(raw).strip()
+        )
+    except ValueError as exc:
+        raise ValueError(
+            "POCKET_TTS_WARM_CACHE_MAX_BYTES "
+            "must be an integer when set"
+        ) from exc
+
+    minimum = 16 * 1024 * 1024
+    maximum = 256 * 1024 * 1024
+
+    if not minimum <= value <= maximum:
+        raise ValueError(
+            "POCKET_TTS_WARM_CACHE_MAX_BYTES "
+            "must be between 16 MiB "
+            "and 256 MiB"
+        )
+
+    return value
+
+
+def _prune_warm_cache(
+    max_bytes=None,
+):
+    root = _warm_cache_root()
+
+    if (
+        not root
+        or not os.path.isdir(root)
+    ):
+        return {
+            "before_bytes": 0,
+            "after_bytes": 0,
+            "removed_files": 0,
+        }
+
+    limit = (
+        _warm_cache_limit_bytes()
+        if max_bytes is None
+        else int(max_bytes)
+    )
+
+    files = []
+    total = 0
+
+    for directory, _dirs, names in os.walk(
+        root
+    ):
+        for name in names:
+            path = os.path.join(
+                directory,
+                name,
+            )
+
+            try:
+                stat = os.stat(path)
+            except OSError:
+                continue
+
+            size = int(
+                stat.st_size
+            )
+
+            total += size
+
+            files.append(
+                (
+                    float(
+                        stat.st_mtime
+                    ),
+                    path,
+                    size,
+                )
+            )
+
+    before = total
+    removed = 0
+
+    if total > limit:
+        files.sort(
+            key=lambda item: item[0]
+        )
+
+        for _mtime, path, size in files:
+            if total <= limit:
+                break
+
+            try:
+                os.remove(path)
+            except OSError:
+                continue
+
+            total -= size
+            removed += 1
+
+    if (
+        before
+        or removed
+    ):
+        print(
+            "  Warm /tmp cache: "
+            f"{before / 1048576:.1f} MiB "
+            "-> "
+            f"{total / 1048576:.1f} MiB; "
+            f"removed={removed}; "
+            f"budget={limit / 1048576:.0f} MiB"
+        )
+
+    return {
+        "before_bytes": before,
+        "after_bytes": total,
+        "removed_files": removed,
+    }
+
+
+def _load_model_cached(
+    *args,
+    **kwargs,
+):
+    loader = TTSModel.load_model
+
+    loader_identity = getattr(
+        loader,
+        "__func__",
+        loader,
+    )
+
+    key = (
+        id(loader_identity),
+        tuple(
+            repr(value)
+            for value in args
+        ),
+        tuple(
+            sorted(
+                (
+                    str(name),
+                    repr(value),
+                )
+                for name, value
+                in kwargs.items()
+            )
+        ),
+    )
+
+    if key in _MODEL_CACHE:
+        model = _MODEL_CACHE[key]
+
+        _MODEL_CACHE.move_to_end(
+            key
+        )
+
+        print(
+            "  PocketTTS global model "
+            "cache HIT "
+            f"cpu={os.cpu_count()} "
+            f"intra={torch.get_num_threads()} "
+            "interop="
+            f"{torch.get_num_interop_threads()}"
+        )
+
+        return model
+
+    started = time.perf_counter()
+
+    model = loader(
+        *args,
+        **kwargs,
+    )
+
+    elapsed = (
+        time.perf_counter()
+        - started
+    )
+
+    _MODEL_CACHE[key] = model
+
+    _MODEL_CACHE.move_to_end(
+        key
+    )
+
+    while (
+        len(_MODEL_CACHE)
+        > _MODEL_CACHE_MAX_ENTRIES
+    ):
+        _old_key, old_model = (
+            _MODEL_CACHE.popitem(
+                last=False
+            )
+        )
+
+        del old_model
+
+    print(
+        "  PocketTTS global model "
+        "cache MISS "
+        f"load={elapsed:.3f}s "
+        f"entries={len(_MODEL_CACHE)} "
+        f"cpu={os.cpu_count()} "
+        f"intra={torch.get_num_threads()} "
+        "interop="
+        f"{torch.get_num_interop_threads()}"
+    )
+
+    return model
+
 
 
 # ============================================================
@@ -160,8 +442,8 @@ def build_runtime_config(base_dir, environment):
         "quote_reference_start_seconds": optional_float(environment.get("NARRATION_QUOTE_REFERENCE_START")),
         "output_dir": output_dir,
         "internal_dir": internal_dir,
-        "raw_cache_dir": os.path.join(internal_dir, "raw_cache"),
-        "voice_state_cache_dir": os.path.join(internal_dir, "voice_states"),
+        "raw_cache_dir": _warm_cache_path("raw_cache", os.path.join(internal_dir, "raw_cache")),
+        "voice_state_cache_dir": _warm_cache_path("voice_states", os.path.join(internal_dir, "voice_states")),
         "debug_dir": os.path.join(internal_dir, "debug"),
     }
 
@@ -947,8 +1229,8 @@ def run_pipeline(
         "quote_mode": str(quote_mode).strip().lower(),
         "output_dir": output_dir,
         "internal_dir": internal_dir,
-        "raw_cache_dir": os.path.join(internal_dir, "raw_cache"),
-        "voice_state_cache_dir": os.path.join(internal_dir, "voice_states"),
+        "raw_cache_dir": _warm_cache_path("raw_cache", os.path.join(internal_dir, "raw_cache")),
+        "voice_state_cache_dir": _warm_cache_path("voice_states", os.path.join(internal_dir, "voice_states")),
         "debug_dir": os.path.join(internal_dir, "debug"),
         "render_speed": render_speed,
     }
@@ -1005,6 +1287,8 @@ def run_pipeline(
     }
     print(f"Profile: {settings.name}; rendered speed: {render_speed:.0%}; seed: {seed}")
 
+    _prune_warm_cache()
+
     # Mutate directories only after config, references, routing, and ffmpeg pass.
     for directory in (
         config["output_dir"],
@@ -1030,8 +1314,16 @@ def run_pipeline(
             "cut_algorithm": ALGORITHM_VERSION,
             "start_seconds": start_seconds,
         })
-        anchor_path = os.path.join(
+        anchor_dir = _warm_cache_path(
+            "reference_anchors",
             config["internal_dir"],
+        )
+        os.makedirs(
+            anchor_dir,
+            exist_ok=True,
+        )
+        anchor_path = os.path.join(
+            anchor_dir,
             f"voice_anchor_{role}_{anchor_key[:20]}.wav",
         )
         metadata = prepare_voice_anchor(references[role], anchor_path, start_seconds)
@@ -1075,7 +1367,7 @@ def run_pipeline(
             else "lsd_decode_steps"
         )
         if temperature not in models_by_temperature:
-            models_by_temperature[temperature] = TTSModel.load_model(
+            models_by_temperature[temperature] = _load_model_cached(
                 language=MODEL_LANGUAGE, temp=temperature,
                 **{step_argument: settings.decode_steps},
                 noise_clamp=NOISE_CLAMP, eos_threshold=EOS_THRESHOLD, quantize=QUANTIZE,
