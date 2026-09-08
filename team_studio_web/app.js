@@ -238,14 +238,13 @@ async function loadPosts(page = 1) {
 function voiceCard(voice) {
   return `
     <article class="voice-card">
-      <div class="voice-icon">◖</div>
+      <div class="voice-card-top"><div class="voice-icon" aria-hidden="true"></div>${pill(voice.status || "UNKNOWN")}</div>
       <h3>${esc(voice.display_name || "Unnamed voice")}</h3>
       <div class="voice-id">${esc(voice.voice_id)}</div>
       <div class="voice-foot">
-        ${pill(voice.status || "UNKNOWN")}
         <div class="voice-actions">
           <button type="button" class="play-button" data-voice-generations="${esc(voice.voice_id)}">View generations</button>
-          <button class="play-button" data-voice-play="${esc(voice.voice_id)}">▶ Reference</button>
+          <button type="button" class="play-button voice-listen" data-voice-play="${esc(voice.voice_id)}" aria-label="Listen to ${esc(voice.display_name || voice.voice_id)} reference"><svg class="icon" aria-hidden="true"><use href="#icon-play"></use></svg>Listen</button>
           ${
             voice.status === "ACTIVE"
               ? `<button class="play-button archive-button" data-voice-archive="${esc(voice.voice_id)}">Archive</button>`
@@ -420,7 +419,7 @@ async function showVoiceGenerations(voiceId) {
     list.innerHTML = items.length ? `<p>${items.length} generation${items.length === 1 ? "" : "s"}</p>` + items.map(gen => {
       const href = `/studio?post=${encodeURIComponent(gen.source_post_id)}&gen=${encodeURIComponent(gen.generation_id)}`;
       const role = gen.voice_id === voiceId ? (gen.quote_voice_id === voiceId ? "Narrator and quote voice" : "Narrator") : "Quote voice";
-      return `<article class="voice-history-item"><strong>${esc(gen.post_title || gen.source_post_id || "Story unavailable")}</strong><p>${esc(gen.created_at || "")} · ${role}</p><p>${esc(gen.generation_status || "NOT QUEUED")} · ${esc(gen.review_status || "DRAFT")}</p>${gen.source_post_id ? `<a class="small-button" href="${esc(href)}">${gen.generation_status === "COMPLETED" ? "Open and listen" : "Open generation"}</a>` : ""}</article>`;
+      return `<article class="voice-history-item"><strong>${esc(gen.post_title || gen.source_post_id || "Story unavailable")}</strong><p class="voice-history-meta">${esc(gen.created_at ? new Date(gen.created_at).toLocaleString(undefined, {dateStyle: "medium", timeStyle: "short"}) : "Date unavailable")} &middot; ${role}</p><div class="voice-history-status">${pill(gen.generation_status || "NOT QUEUED")}${pill(gen.review_status || "DRAFT")}</div>${gen.source_post_id ? `<a class="small-button" href="${esc(href)}">${gen.generation_status === "COMPLETED" ? "Open and listen" : "Open generation"}</a>` : ""}</article>`;
     }).join("") : '<div class="empty"><strong>No generations yet</strong>This voice has not been used in any generations.</div>';
   } catch (error) {
     if (request === voiceHistoryRequest) list.textContent = `Could not load generations: ${error.message}`;
