@@ -73,9 +73,7 @@ function esc(value = "") {
 }
 
 function cssEscape(value) {
-  return window.CSS && CSS.escape
-    ? CSS.escape(String(value))
-    : String(value).replace(/["\\]/g, "\\$&");
+  return window.CSS && CSS.escape ? CSS.escape(String(value)) : String(value).replace(/["\\]/g, "\\$&");
 }
 
 function short(value = "") {
@@ -87,11 +85,7 @@ function date(value) {
   if (!value) return "—";
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) return String(value);
-  return new Intl.DateTimeFormat(undefined, {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  }).format(parsed);
+  return new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", year: "numeric" }).format(parsed);
 }
 
 function formatTime(seconds) {
@@ -102,10 +96,7 @@ function formatTime(seconds) {
 }
 
 function skeletonCards(count) {
-  return Array.from(
-    { length: count },
-    () => `<div class="skeleton-card"></div>`,
-  ).join("");
+  return Array.from({ length: count }, () => `<div class="skeleton-card"></div>`).join("");
 }
 
 function toast(message, kind = "") {
@@ -130,24 +121,20 @@ async function api(path, options = {}) {
 
   const response = await fetch(path, init);
   const type = response.headers.get("content-type") || "";
-  const payload = type.includes("application/json")
-    ? await response.json()
-    : {};
+  const payload = type.includes("application/json") ? await response.json() : {};
 
   if (response.status === 401) {
     showLogin();
     throw new Error("Studio session expired.");
   }
   if (!response.ok) {
-    throw new Error(
-      payload.message || payload.error || `Request failed (${response.status})`,
-    );
+    throw new Error(payload.message || payload.error || `Request failed (${response.status})`);
   }
   return payload;
 }
 
 function showLogin() {
-  selectControls.forEach((control) => control.close());
+  selectControls.forEach(control => control.close());
   stopPoll();
   closePlayer();
   $("#studio-shell").classList.add("hidden");
@@ -161,12 +148,10 @@ function showStudio() {
 }
 
 function setView(name) {
-  selectControls.forEach((control) => control.close());
+  selectControls.forEach(control => control.close());
   $$(".view").forEach((node) => node.classList.add("hidden"));
   $(`#${name}-view`).classList.remove("hidden");
-  $$(".nav-item").forEach((node) =>
-    node.classList.toggle("active", node.dataset.view === name),
-  );
+  $$(".nav-item").forEach((node) => node.classList.toggle("active", node.dataset.view === name));
 
   if (name === "posts") {
     $("#page-title").textContent = "Published posts";
@@ -178,17 +163,13 @@ function setView(name) {
     $("#page-title").textContent = "Voice folders";
     stopPoll();
   } else {
-    $("#page-title").textContent =
-      state.currentPost?.post?.title || "Narration";
+    $("#page-title").textContent = state.currentPost?.post?.title || "Narration";
   }
 }
 
 function pill(value) {
   const text = value || "NOT QUEUED";
-  const css = String(text)
-    .toLowerCase()
-    .replaceAll("_", "-")
-    .replaceAll(" ", "-");
+  const css = String(text).toLowerCase().replaceAll("_", "-").replaceAll(" ", "-");
   return `<span class="pill ${esc(css)}">${esc(text)}</span>`;
 }
 
@@ -198,17 +179,13 @@ function updateRuntime() {
 
   chips.forEach((chip) => {
     chip.querySelector(".dot").classList.toggle("paused", !enabled);
-    chip.querySelector("strong").textContent = enabled
-      ? "Studio ready"
-      : "Processing unavailable";
+    chip.querySelector("strong").textContent = enabled ? "Studio ready" : "Processing unavailable";
     chip.querySelector("small").textContent = enabled
       ? "Narration processing"
       : "Please refresh in a moment";
   });
 
-  const activeVoices = state.voices.filter(
-    (voice) => voice.status === "ACTIVE",
-  );
+  const activeVoices = state.voices.filter((voice) => voice.status === "ACTIVE");
   const button = $("#generate-button");
   if (button) {
     button.disabled = !enabled || activeVoices.length === 0;
@@ -261,26 +238,20 @@ async function loadPosts(page = 1) {
 function voiceCard(voice) {
   return `
     <article class="voice-card">
-      <div class="voice-card-head">
-        <div class="voice-icon" aria-hidden="true">◖</div>
-        <span class="voice-type">Reference voice</span>
+      <div class="voice-icon">◖</div>
+      <h3>${esc(voice.display_name || "Unnamed voice")}</h3>
+      <div class="voice-id">${esc(voice.voice_id)}</div>
+      <div class="voice-foot">
         ${pill(voice.status || "UNKNOWN")}
-      </div>
-      <div class="voice-card-body">
-        <h3>${esc(voice.display_name || "Unnamed voice")}</h3>
-        <div class="voice-id" title="${esc(voice.voice_id)}">${esc(voice.voice_id)}</div>
-      </div>
-      <div class="voice-card-foot">
-        <button type="button" class="play-button voice-listen-button" data-voice-play="${esc(voice.voice_id)}">
-          <svg class="icon" aria-hidden="true"><use href="#icon-play"></use></svg>
-          <span>Listen</span>
-        </button>
-        <button type="button" class="play-button voice-history-button" data-voice-generations="${esc(voice.voice_id)}">View generations</button>
-        ${
-          voice.status === "ACTIVE"
-            ? `<button type="button" class="play-button archive-button" data-voice-archive="${esc(voice.voice_id)}">Archive</button>`
-            : ""
-        }
+        <div class="voice-actions">
+          <button type="button" class="play-button" data-voice-generations="${esc(voice.voice_id)}">View generations</button>
+          <button class="play-button" data-voice-play="${esc(voice.voice_id)}">▶ Reference</button>
+          ${
+            voice.status === "ACTIVE"
+              ? `<button class="play-button archive-button" data-voice-archive="${esc(voice.voice_id)}">Archive</button>`
+              : ""
+          }
+        </div>
       </div>
     </article>`;
 }
@@ -324,57 +295,37 @@ function initSelectControls() {
     let activeIndex = -1;
 
     function activate(index) {
-      activeIndex = options.length
-        ? Math.max(0, Math.min(index, options.length - 1))
-        : -1;
-      [...list.children].forEach((row, i) =>
-        row.classList.toggle("is-active", i === activeIndex),
-      );
+      activeIndex = options.length ? Math.max(0, Math.min(index, options.length - 1)) : -1;
+      [...list.children].forEach((row, i) => row.classList.toggle("is-active", i === activeIndex));
       if (activeIndex >= 0) {
         const row = list.children[activeIndex];
         focusTarget.setAttribute("aria-activedescendant", row.id);
-        if (!menu.classList.contains("hidden"))
-          row.scrollIntoView({ block: "nearest" });
+        if (!menu.classList.contains("hidden")) row.scrollIntoView({ block: "nearest" });
       } else focusTarget.removeAttribute("aria-activedescendant");
     }
 
     function draw() {
       const query = (search?.value || "").trim().toLocaleLowerCase();
-      const available = [...select.options].filter(
-        (option) => option.value && !option.disabled,
-      );
-      options = available.filter((option) =>
-        option.textContent.toLocaleLowerCase().includes(query),
-      );
+      const available = [...select.options].filter(option => option.value && !option.disabled);
+      options = available.filter(option => option.textContent.toLocaleLowerCase().includes(query));
       list.replaceChildren();
       options.forEach((option, index) => {
         const row = document.createElement("div");
         row.id = `${id}-option-${index}`;
         row.className = "select-option";
         row.setAttribute("role", "option");
-        row.setAttribute(
-          "aria-selected",
-          String(option.value === select.value),
-        );
+        row.setAttribute("aria-selected", String(option.value === select.value));
         const name = document.createElement("span");
         name.textContent = option.textContent;
         row.append(name);
-        row.addEventListener("mousedown", (event) => event.preventDefault());
+        row.addEventListener("mousedown", event => event.preventDefault());
         row.addEventListener("click", () => choose(index));
         list.append(row);
       });
-      wrapper
-        .querySelector(".select-empty")
-        .classList.toggle("hidden", options.length > 0);
+      wrapper.querySelector(".select-empty").classList.toggle("hidden", options.length > 0);
       wrapper.querySelector(".select-count").textContent = searchable
-        ? `${options.length} of ${available.length} voices`
-        : "Choose how quotes are narrated";
-      activate(
-        Math.max(
-          0,
-          options.findIndex((option) => option.value === select.value),
-        ),
-      );
+        ? `${options.length} of ${available.length} voices` : "Choose how quotes are narrated";
+      activate(Math.max(0, options.findIndex(option => option.value === select.value)));
     }
 
     function close(restoreFocus = false) {
@@ -387,11 +338,8 @@ function initSelectControls() {
     }
 
     function refresh() {
-      wrapper.querySelector(".select-value").textContent =
-        select.selectedOptions[0]?.textContent || "Choose a voice";
-      trigger.disabled =
-        select.disabled ||
-        ![...select.options].some((option) => option.value && !option.disabled);
+      wrapper.querySelector(".select-value").textContent = select.selectedOptions[0]?.textContent || "Choose a voice";
+      trigger.disabled = select.disabled || ![...select.options].some(option => option.value && !option.disabled);
       if (trigger.disabled) close();
       else if (!menu.classList.contains("hidden")) draw();
     }
@@ -406,7 +354,7 @@ function initSelectControls() {
 
     function open() {
       if (trigger.disabled) return;
-      selectControls.forEach((control) => control.close());
+      selectControls.forEach(control => control.close());
       if (search) search.value = "";
       menu.classList.remove("hidden");
       wrapper.classList.add("is-open");
@@ -414,61 +362,36 @@ function initSelectControls() {
       search?.setAttribute("aria-expanded", "true");
       draw();
       const rect = trigger.getBoundingClientRect();
-      wrapper.classList.toggle(
-        "opens-up",
-        window.innerHeight - rect.bottom < menu.offsetHeight + 12 &&
-          rect.top > menu.offsetHeight + 12,
-      );
+      wrapper.classList.toggle("opens-up", window.innerHeight - rect.bottom < menu.offsetHeight + 12 && rect.top > menu.offsetHeight + 12);
       focusTarget.focus();
     }
 
-    trigger.addEventListener("click", () =>
-      menu.classList.contains("hidden") ? open() : close(),
-    );
+    trigger.addEventListener("click", () => menu.classList.contains("hidden") ? open() : close());
     search?.addEventListener("input", draw);
-    wrapper.addEventListener("keydown", (event) => {
+    wrapper.addEventListener("keydown", event => {
       const opened = !menu.classList.contains("hidden");
       if (event.key === "Escape" && opened) {
-        event.preventDefault();
-        event.stopPropagation();
-        close(true);
+        event.preventDefault(); event.stopPropagation(); close(true);
       } else if (event.key === "ArrowDown" || event.key === "ArrowUp") {
-        event.preventDefault();
-        event.stopPropagation();
+        event.preventDefault(); event.stopPropagation();
         if (!opened) open();
         else activate(activeIndex + (event.key === "ArrowDown" ? 1 : -1));
       } else if (event.key === "Enter" && opened) {
-        event.preventDefault();
-        choose(activeIndex);
+        event.preventDefault(); choose(activeIndex);
       } else if (!search && opened && ["Home", "End"].includes(event.key)) {
-        event.preventDefault();
-        activate(event.key === "Home" ? 0 : options.length - 1);
-      } else if (
-        search &&
-        event.target === trigger &&
-        event.key.length === 1 &&
-        event.key !== " " &&
-        !event.ctrlKey &&
-        !event.metaKey &&
-        !event.altKey
-      ) {
-        event.preventDefault();
-        open();
-        search.value = event.key;
-        draw();
+        event.preventDefault(); activate(event.key === "Home" ? 0 : options.length - 1);
+      } else if (search && event.target === trigger && event.key.length === 1 && event.key !== " " && !event.ctrlKey && !event.metaKey && !event.altKey) {
+        event.preventDefault(); open(); search.value = event.key; draw();
       }
     });
-    wrapper.addEventListener("focusout", (event) => {
+    wrapper.addEventListener("focusout", event => {
       if (!wrapper.contains(event.relatedTarget)) close();
     });
-    document.addEventListener("pointerdown", (event) => {
+    document.addEventListener("pointerdown", event => {
       if (!wrapper.contains(event.target)) close();
     });
     select.addEventListener("change", refresh);
-    select.addEventListener("invalid", (event) => {
-      event.preventDefault();
-      trigger.focus();
-    });
+    select.addEventListener("invalid", event => { event.preventDefault(); trigger.focus(); });
     selectControls.set(id, { close, refresh });
     refresh();
   });
@@ -477,7 +400,7 @@ function initSelectControls() {
     // Opening a phone keyboard changes height; keep the search usable.
     if (window.innerWidth === viewportWidth) return;
     viewportWidth = window.innerWidth;
-    selectControls.forEach((control) => control.close());
+    selectControls.forEach(control => control.close());
   });
 }
 
@@ -486,35 +409,21 @@ async function showVoiceGenerations(voiceId) {
   const request = ++voiceHistoryRequest;
   const dialog = $("#voice-generations-dialog");
   const list = $("#voice-generations-list");
-  const voice = state.voices.find((item) => item.voice_id === voiceId);
-  $("#voice-generations-title").textContent =
-    `Generations — ${voice?.display_name || voiceId}`;
+  const voice = state.voices.find(item => item.voice_id === voiceId);
+  $("#voice-generations-title").textContent = `Generations — ${voice?.display_name || voiceId}`;
   list.textContent = "Loading generations…";
   if (!dialog.open) dialog.showModal();
   try {
-    const payload = await api(
-      `/studio-api/voices/${encodeURIComponent(voiceId)}/generations`,
-    );
+    const payload = await api(`/studio-api/voices/${encodeURIComponent(voiceId)}/generations`);
     if (request !== voiceHistoryRequest) return;
     const items = payload.items || [];
-    list.innerHTML = items.length
-      ? `<p>${items.length} generation${items.length === 1 ? "" : "s"}</p>` +
-        items
-          .map((gen) => {
-            const href = `/studio?post=${encodeURIComponent(gen.source_post_id)}&gen=${encodeURIComponent(gen.generation_id)}`;
-            const role =
-              gen.voice_id === voiceId
-                ? gen.quote_voice_id === voiceId
-                  ? "Narrator and quote voice"
-                  : "Narrator"
-                : "Quote voice";
-            return `<article class="voice-history-item"><div class="voice-history-heading"><div><span class="voice-history-kicker">${esc(role)}</span><strong>${esc(gen.post_title || gen.source_post_id || "Story unavailable")}</strong></div><span class="voice-history-date">${esc(gen.created_at || "")}</span></div><div class="voice-history-status"><span class="history-status history-status-${String(gen.generation_status || "NOT QUEUED").toLowerCase()}">${esc(gen.generation_status || "NOT QUEUED")}</span><span class="history-review">${esc(gen.review_status || "DRAFT")}</span></div>${gen.source_post_id ? `<a class="small-button history-open-button" href="${esc(href)}"><svg class="icon" aria-hidden="true"><use href="#icon-${gen.generation_status === "COMPLETED" ? "play" : "external"}"></use></svg>${gen.generation_status === "COMPLETED" ? "Open and listen" : "Open generation"}</a>` : ""}</article>`;
-          })
-          .join("")
-      : '<div class="empty"><strong>No generations yet</strong>This voice has not been used in any generations.</div>';
+    list.innerHTML = items.length ? `<p>${items.length} generation${items.length === 1 ? "" : "s"}</p>` + items.map(gen => {
+      const href = `/studio?post=${encodeURIComponent(gen.source_post_id)}&gen=${encodeURIComponent(gen.generation_id)}`;
+      const role = gen.voice_id === voiceId ? (gen.quote_voice_id === voiceId ? "Narrator and quote voice" : "Narrator") : "Quote voice";
+      return `<article class="voice-history-item"><strong>${esc(gen.post_title || gen.source_post_id || "Story unavailable")}</strong><p>${esc(gen.created_at || "")} · ${role}</p><p>${esc(gen.generation_status || "NOT QUEUED")} · ${esc(gen.review_status || "DRAFT")}</p>${gen.source_post_id ? `<a class="small-button" href="${esc(href)}">${gen.generation_status === "COMPLETED" ? "Open and listen" : "Open generation"}</a>` : ""}</article>`;
+    }).join("") : '<div class="empty"><strong>No generations yet</strong>This voice has not been used in any generations.</div>';
   } catch (error) {
-    if (request === voiceHistoryRequest)
-      list.textContent = `Could not load generations: ${error.message}`;
+    if (request === voiceHistoryRequest) list.textContent = `Could not load generations: ${error.message}`;
   }
 }
 
@@ -527,22 +436,15 @@ function renderVoices() {
     ? active.map(voiceCard).join("")
     : `<div class="empty"><strong>No active voices</strong>Add a reference WAV.</div>`;
 
-  const options = active
-    .map(
-      (voice) =>
-        `<option value="${esc(voice.voice_id)}">${esc(voice.display_name || voice.voice_id)}</option>`,
-    )
-    .join("");
+  const options = active.map((voice) =>
+    `<option value="${esc(voice.voice_id)}">${esc(voice.display_name || voice.voice_id)}</option>`
+  ).join("");
 
-  $("#narrator-select").innerHTML =
-    options || `<option value="">No active voices</option>`;
-  $("#quote-voice-select").innerHTML =
-    `<option value="">Choose quote voice</option>${options}`;
-  if (active.some((voice) => voice.voice_id === narratorId))
-    $("#narrator-select").value = narratorId;
-  if (active.some((voice) => voice.voice_id === quoteVoiceId))
-    $("#quote-voice-select").value = quoteVoiceId;
-  selectControls.forEach((control) => control.refresh());
+  $("#narrator-select").innerHTML = options || `<option value="">No active voices</option>`;
+  $("#quote-voice-select").innerHTML = `<option value="">Choose quote voice</option>${options}`;
+  if (active.some(voice => voice.voice_id === narratorId)) $("#narrator-select").value = narratorId;
+  if (active.some(voice => voice.voice_id === quoteVoiceId)) $("#quote-voice-select").value = quoteVoiceId;
+  selectControls.forEach(control => control.refresh());
   updateRuntime();
   syncPlayingHighlights();
 }
@@ -575,43 +477,18 @@ function generationCard(gen) {
   const completed = execution === "COMPLETED";
   const comparing = state.compare.includes(gen.generation_id);
   const voice = gen.voice_name || short(gen.voice_id || "") || "Narration";
-  const quoteVoice = state.voices.find(
-    (item) => item.voice_id === gen.quote_voice_id,
-  );
-  const quoteLabel =
-    gen.quote_mode === "two_voice"
-      ? `Quotes: ${quoteVoice?.display_name || "second voice"}`
-      : gen.quote_mode === "exclude"
-        ? "Quotes excluded"
-        : "Narrator reads quotes";
-  const statusLabels = {
-    COMPLETED: "Complete",
-    QUEUED: "Queued",
-    RUNNING: "Generating",
-    FAILED: "Failed",
-  };
-  const reviewLabels = {
-    SELECTED: "Selected take",
-    READY: "Marked ready",
-    OUTDATED: "Outdated",
-  };
-  const executionClass = ["COMPLETED", "QUEUED", "RUNNING", "FAILED"].includes(
-    execution,
-  )
-    ? execution.toLowerCase()
-    : "pending";
-  const reviewClass = ["SELECTED", "READY", "OUTDATED"].includes(review)
-    ? review.toLowerCase()
-    : "unreviewed";
+  const quoteVoice = state.voices.find(item => item.voice_id === gen.quote_voice_id);
+  const quoteLabel = gen.quote_mode === "two_voice"
+    ? `Quotes: ${quoteVoice?.display_name || "second voice"}`
+    : gen.quote_mode === "exclude" ? "Quotes excluded" : "Narrator reads quotes";
+  const statusLabels = { COMPLETED: "Complete", QUEUED: "Queued", RUNNING: "Generating", FAILED: "Failed" };
+  const reviewLabels = { SELECTED: "Selected take", READY: "Marked ready", OUTDATED: "Outdated" };
+  const executionClass = ["COMPLETED", "QUEUED", "RUNNING", "FAILED"].includes(execution) ? execution.toLowerCase() : "pending";
+  const reviewClass = ["SELECTED", "READY", "OUTDATED"].includes(review) ? review.toLowerCase() : "unreviewed";
   const created = new Date(gen.created_at);
-  const timestamp = Number.isNaN(created.getTime())
-    ? "Date unavailable"
-    : new Intl.DateTimeFormat(undefined, {
-        month: "short",
-        day: "numeric",
-        hour: "numeric",
-        minute: "2-digit",
-      }).format(created);
+  const timestamp = Number.isNaN(created.getTime()) ? "Date unavailable" : new Intl.DateTimeFormat(undefined, {
+    month: "short", day: "numeric", hour: "numeric", minute: "2-digit",
+  }).format(created);
   return `
     <article class="generation-card review-${reviewClass}" data-generation-id="${esc(gen.generation_id)}">
       <div class="generation-info">
@@ -627,23 +504,18 @@ function generationCard(gen) {
         </div>
       </div>
       ${completed ? `<button type="button" class="take-listen" data-audio="${esc(gen.generation_id)}" aria-label="Listen to ${esc(voice)} from ${esc(timestamp)}"><svg class="icon" aria-hidden="true"><use href="#icon-play"></use></svg><span>Listen</span></button>` : `<span class="take-waiting">${execution === "QUEUED" ? "Waiting to start" : execution === "RUNNING" ? "Creating audio?" : execution === "FAILED" ? "Audio unavailable" : "Not yet generated"}</span>`}
-      ${
-        completed || review === "SELECTED"
-          ? `<div class="generation-actions">
+      ${completed || review === "SELECTED" ? `<div class="generation-actions">
         ${completed ? `<button type="button" class="small-button ${comparing ? "is-active" : ""}" aria-pressed="${comparing}" data-compare="${esc(gen.generation_id)}">${comparing ? "? Comparing" : "Compare"}</button>` : ""}
         ${completed ? `<button type="button" class="small-button take-select" data-review="SELECTED" data-gen="${esc(gen.generation_id)}" ${review === "SELECTED" ? "disabled" : ""}>${review === "SELECTED" ? "? Selected" : "Select take"}</button>` : ""}
         ${review === "SELECTED" ? `<button type="button" class="small-button" data-review="READY" data-gen="${esc(gen.generation_id)}">Mark ready</button>` : ""}
         ${completed ? `<button type="button" class="text-button take-outdate" data-review="OUTDATED" data-gen="${esc(gen.generation_id)}" ${review === "OUTDATED" ? "disabled" : ""}>${review === "OUTDATED" ? "Outdated" : "Mark outdated"}</button>` : ""}
-      </div>`
-          : ""
-      }
+      </div>` : ""}
     </article>`;
 }
 
 function renderGenerations() {
   const generations = state.currentPost?.generations || [];
-  $("#generation-count").textContent =
-    `${generations.length} generation${generations.length === 1 ? "" : "s"}`;
+  $("#generation-count").textContent = `${generations.length} generation${generations.length === 1 ? "" : "s"}`;
   $("#generation-list").innerHTML = generations.length
     ? generations.map(generationCard).join("")
     : `<div class="empty"><strong>No audio yet</strong>Choose a voice when processing is enabled.</div>`;
@@ -660,12 +532,10 @@ function renderCompareTray() {
   tray.classList.remove("hidden");
   const generations = state.currentPost?.generations || [];
   const labels = ["A", "B"];
-  $("#compare-chips").innerHTML = state.compare
-    .map((id, index) => {
-      const gen = generations.find((item) => item.generation_id === id);
-      return `<span class="compare-chip" data-compare-play="${esc(id)}">${labels[index]} · ${esc(gen?.voice_name || short(id))}<button data-compare-remove="${esc(id)}" aria-label="Remove from comparison">×</button></span>`;
-    })
-    .join("");
+  $("#compare-chips").innerHTML = state.compare.map((id, index) => {
+    const gen = generations.find((item) => item.generation_id === id);
+    return `<span class="compare-chip" data-compare-play="${esc(id)}">${labels[index]} · ${esc(gen?.voice_name || short(id))}<button data-compare-remove="${esc(id)}" aria-label="Remove from comparison">×</button></span>`;
+  }).join("");
 }
 
 function toggleCompare(generationId) {
@@ -685,8 +555,7 @@ function renderCurrentPost(payload) {
   const doc = payload.document;
   const generations = payload.generations || [];
 
-  $("#post-meta").textContent =
-    `${date(post.published_at)} · ${post.primary_author || "Gratefulness"}`;
+  $("#post-meta").textContent = `${date(post.published_at)} · ${post.primary_author || "Gratefulness"}`;
   $("#post-title").textContent = post.title;
   $("#ghost-link").href = post.url;
   $("#page-title").textContent = post.title;
@@ -696,9 +565,7 @@ function renderCurrentPost(payload) {
   renderGenerations();
   updateRuntime();
 
-  const live = generations.some((gen) =>
-    ["QUEUED", "RUNNING"].includes(gen.generation_status),
-  );
+  const live = generations.some((gen) => ["QUEUED", "RUNNING"].includes(gen.generation_status));
   if (live) startPoll(post.id);
   else stopPoll();
 }
@@ -711,11 +578,7 @@ async function openPost(postId) {
   const payload = await api(`/studio-api/posts/${encodeURIComponent(postId)}`);
   renderCurrentPost(payload);
   setView("post");
-  history.replaceState(
-    { postId },
-    "",
-    `/studio?post=${encodeURIComponent(postId)}`,
-  );
+  history.replaceState({ postId }, "", `/studio?post=${encodeURIComponent(postId)}`);
 }
 
 async function refreshPost() {
@@ -728,16 +591,11 @@ async function refreshPost() {
 function startPoll(postId) {
   stopPoll();
   state.poll = setInterval(async () => {
-    if (
-      state.currentPost?.post?.id !== postId ||
-      $("#post-view").classList.contains("hidden")
-    ) {
+    if (state.currentPost?.post?.id !== postId || $("#post-view").classList.contains("hidden")) {
       stopPoll();
       return;
     }
-    try {
-      await refreshPost();
-    } catch {}
+    try { await refreshPost(); } catch {}
   }, 7000);
 }
 
@@ -768,20 +626,13 @@ async function createGeneration() {
     body.quote_voice_id = quoteVoiceId;
   }
 
-  const prepared = await api(
-    `/studio-api/posts/${encodeURIComponent(postId)}/generations`,
-    {
-      method: "POST",
-      body,
-    },
-  );
+  const prepared = await api(`/studio-api/posts/${encodeURIComponent(postId)}/generations`, {
+    method: "POST",
+    body,
+  });
 
   const queued = await api(prepared.enqueue_path, { method: "POST", body: {} });
-  toast(
-    queued.already_queued
-      ? "Generation was already queued."
-      : "Generation queued.",
-  );
+  toast(queued.already_queued ? "Generation was already queued." : "Generation queued.");
   await refreshPost();
 }
 
@@ -798,8 +649,7 @@ async function reviewGeneration(generationId, reviewStatus) {
 
 async function createVoice(name, file) {
   if (!file) throw new Error("Choose a WAV reference.");
-  if (file.size > 10 * 1024 * 1024)
-    throw new Error("WAV must be 10 MB or smaller.");
+  if (file.size > 10 * 1024 * 1024) throw new Error("WAV must be 10 MB or smaller.");
 
   const encoded = await new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -840,14 +690,15 @@ function initPlayer() {
 // and decode the full file client-side, which is fragile against signed
 // URLs with no CORS headers. Cheap, stable, and reads as a real waveform.
 
+
+
+
 function updatePlayerProgress() {
   const a = player.audio;
   if (!a || !player.meta) return;
   const duration = Number.isFinite(a.duration) ? a.duration : 0;
   const current = a.currentTime || 0;
-  $("#player-progress").value = String(
-    duration ? Math.min(100, (current / duration) * 100) : 0,
-  );
+  $("#player-progress").value = String(duration ? Math.min(100, current / duration * 100) : 0);
   $("#player-current").textContent = formatTime(current);
   $("#player-duration").textContent = formatTime(duration);
 }
@@ -864,25 +715,19 @@ function syncPlayingHighlights() {
   $$(".play-button").forEach((btn) => btn.classList.remove("is-playing"));
   if (!player.meta || player.audio.paused) return;
   if (player.meta.kind === "generation") {
-    $(
-      `.generation-card[data-generation-id="${cssEscape(player.meta.id)}"]`,
-    )?.classList.add("is-playing");
+    $(`.generation-card[data-generation-id="${cssEscape(player.meta.id)}"]`)?.classList.add("is-playing");
   } else {
-    $(`[data-voice-play="${cssEscape(player.meta.id)}"]`)?.classList.add(
-      "is-playing",
-    );
+    $(`[data-voice-play="${cssEscape(player.meta.id)}"]`)?.classList.add("is-playing");
   }
 }
 
 async function loadIntoPlayer({ id, kind, url, title, download }) {
   const a = player.audio;
-  const sameTrack =
-    player.meta && player.meta.id === id && player.meta.kind === kind;
+  const sameTrack = player.meta && player.meta.id === id && player.meta.kind === kind;
   player.meta = { id, kind, url, title, download };
 
   $("#player-bar").classList.remove("hidden");
-  $("#player-kind").textContent =
-    kind === "generation" ? "Generation" : "Voice reference";
+  $("#player-kind").textContent = kind === "generation" ? "Generation" : "Voice reference";
   $("#player-title").textContent = title;
   $("#player-download").href = url;
   $("#player-download").setAttribute("download", download || "");
@@ -903,8 +748,7 @@ async function loadIntoPlayer({ id, kind, url, title, download }) {
 function togglePlayerPlay() {
   const a = player.audio;
   if (!a.src) return;
-  if (a.paused) a.play().catch(() => {});
-  else a.pause();
+  if (a.paused) a.play().catch(() => {}); else a.pause();
 }
 
 function seekPlayerBy(delta) {
@@ -930,20 +774,14 @@ function setPlayerVolume(ratio) {
   player.audio.volume = ratio;
   player.audio.muted = ratio === 0;
   $("#player-mute").classList.toggle("is-muted", ratio === 0);
-  $("#player-volume-icon").setAttribute(
-    "href",
-    ratio === 0 ? "#icon-volume-off" : "#icon-volume",
-  );
+  $("#player-volume-icon").setAttribute("href", ratio === 0 ? "#icon-volume-off" : "#icon-volume");
 }
 
 function togglePlayerMute() {
   const a = player.audio;
   a.muted = !a.muted;
   $("#player-mute").classList.toggle("is-muted", a.muted);
-  $("#player-volume-icon").setAttribute(
-    "href",
-    a.muted ? "#icon-volume-off" : "#icon-volume",
-  );
+  $("#player-volume-icon").setAttribute("href", a.muted ? "#icon-volume-off" : "#icon-volume");
 }
 
 function closePlayer() {
@@ -962,9 +800,7 @@ async function playGeneration(generationId) {
   const payload = await api(
     `/studio-api/posts/${encodeURIComponent(postId)}/generations/${encodeURIComponent(generationId)}/audio`,
   );
-  const gen = (state.currentPost?.generations || []).find(
-    (item) => item.generation_id === generationId,
-  );
+  const gen = (state.currentPost?.generations || []).find((item) => item.generation_id === generationId);
   const title = state.currentPost?.post?.title || "Narration";
   await loadIntoPlayer({
     id: generationId,
@@ -973,17 +809,11 @@ async function playGeneration(generationId) {
     title: `${title} — ${gen?.voice_name || short(generationId)}`,
     download: `${short(generationId)}.wav`,
   });
-  history.replaceState(
-    {},
-    "",
-    `/studio?post=${encodeURIComponent(postId)}&gen=${encodeURIComponent(generationId)}`,
-  );
+  history.replaceState({}, "", `/studio?post=${encodeURIComponent(postId)}&gen=${encodeURIComponent(generationId)}`);
 }
 
 async function playVoice(voiceId) {
-  const payload = await api(
-    `/studio-api/voices/${encodeURIComponent(voiceId)}/audio`,
-  );
+  const payload = await api(`/studio-api/voices/${encodeURIComponent(voiceId)}/audio`);
   const voice = state.voices.find((item) => item.voice_id === voiceId);
   await loadIntoPlayer({
     id: voiceId,
@@ -1020,26 +850,13 @@ function bindPlayer() {
   });
 
   document.addEventListener("keydown", (event) => {
-    if (
-      document.querySelector(
-        'dialog[open], .select-trigger[aria-expanded="true"]',
-      )
-    )
-      return;
+    if (document.querySelector('dialog[open], .select-trigger[aria-expanded="true"]')) return;
     const tag = (event.target.tagName || "").toLowerCase();
-    if (
-      tag === "input" ||
-      tag === "select" ||
-      tag === "textarea" ||
-      event.target.isContentEditable
-    )
-      return;
+    if (tag === "input" || tag === "select" || tag === "textarea" || event.target.isContentEditable) return;
     if (!player.meta) return;
 
-    if (event.code === "Space") {
-      togglePlayerPlay();
-      event.preventDefault();
-    } else if (event.key === "ArrowRight") seekPlayerBy(10);
+    if (event.code === "Space") { togglePlayerPlay(); event.preventDefault(); }
+    else if (event.key === "ArrowRight") seekPlayerBy(10);
     else if (event.key === "ArrowLeft") seekPlayerBy(-10);
     else if (event.key === "ArrowUp") {
       player.audio.volume = Math.min(1, player.audio.volume + 0.1);
@@ -1074,18 +891,14 @@ function bindDropzone() {
   area.addEventListener("click", () => input.click());
   input.addEventListener("change", () => showFile(input.files[0]));
 
-  ["dragenter", "dragover"].forEach((evt) =>
-    area.addEventListener(evt, (event) => {
-      event.preventDefault();
-      area.classList.add("drag-over");
-    }),
-  );
-  ["dragleave", "drop"].forEach((evt) =>
-    area.addEventListener(evt, (event) => {
-      event.preventDefault();
-      area.classList.remove("drag-over");
-    }),
-  );
+  ["dragenter", "dragover"].forEach((evt) => area.addEventListener(evt, (event) => {
+    event.preventDefault();
+    area.classList.add("drag-over");
+  }));
+  ["dragleave", "drop"].forEach((evt) => area.addEventListener(evt, (event) => {
+    event.preventDefault();
+    area.classList.remove("drag-over");
+  }));
   area.addEventListener("drop", (event) => {
     const file = event.dataTransfer.files?.[0];
     if (!file) return;
@@ -1104,9 +917,7 @@ function bind() {
     const preview = $("#document-preview");
     const expanded = preview.classList.toggle("is-expanded");
     $("#document-expand").setAttribute("aria-expanded", String(expanded));
-    $("#document-expand").textContent = expanded
-      ? "Collapse text"
-      : "Expand text";
+    $("#document-expand").textContent = expanded ? "Collapse text" : "Expand text";
   });
   initSelectControls();
   initPlayer();
@@ -1135,11 +946,8 @@ function bind() {
       if (!$("#post-view").classList.contains("hidden")) await refreshPost();
       else await loadPosts(state.page);
       toast("Studio refreshed.");
-    } catch (error) {
-      toast(error.message, "error");
-    } finally {
-      setTimeout(() => button.classList.remove("spinning"), 450);
-    }
+    } catch (error) { toast(error.message, "error"); }
+    finally { setTimeout(() => button.classList.remove("spinning"), 450); }
   });
 
   let searchTimer;
@@ -1147,11 +955,7 @@ function bind() {
     clearTimeout(searchTimer);
     searchTimer = setTimeout(async () => {
       state.search = $("#post-search").value.trim();
-      try {
-        await loadPosts(1);
-      } catch (error) {
-        toast(error.message, "error");
-      }
+      try { await loadPosts(1); } catch (error) { toast(error.message, "error"); }
     }, 250);
   });
 
@@ -1165,31 +969,21 @@ function bind() {
   document.addEventListener("click", async (event) => {
     const post = event.target.closest("[data-post-id]");
     if (post) {
-      try {
-        await openPost(post.dataset.postId);
-      } catch (error) {
-        toast(error.message, "error");
-      }
+      try { await openPost(post.dataset.postId); } catch (error) { toast(error.message, "error"); }
       return;
     }
 
     const compareRemove = event.target.closest("[data-compare-remove]");
     if (compareRemove) {
       event.stopPropagation();
-      state.compare = state.compare.filter(
-        (id) => id !== compareRemove.dataset.compareRemove,
-      );
+      state.compare = state.compare.filter((id) => id !== compareRemove.dataset.compareRemove);
       renderGenerations();
       return;
     }
 
     const comparePlay = event.target.closest("[data-compare-play]");
     if (comparePlay) {
-      try {
-        await playGeneration(comparePlay.dataset.comparePlay);
-      } catch (error) {
-        toast(error.message, "error");
-      }
+      try { await playGeneration(comparePlay.dataset.comparePlay); } catch (error) { toast(error.message, "error"); }
       return;
     }
 
@@ -1201,21 +995,13 @@ function bind() {
 
     const review = event.target.closest("[data-review]");
     if (review) {
-      try {
-        await reviewGeneration(review.dataset.gen, review.dataset.review);
-      } catch (error) {
-        toast(error.message, "error");
-      }
+      try { await reviewGeneration(review.dataset.gen, review.dataset.review); } catch (error) { toast(error.message, "error"); }
       return;
     }
 
     const audio = event.target.closest("[data-audio]");
     if (audio) {
-      try {
-        await playGeneration(audio.dataset.audio);
-      } catch (error) {
-        toast(error.message, "error");
-      }
+      try { await playGeneration(audio.dataset.audio); } catch (error) { toast(error.message, "error"); }
       return;
     }
 
@@ -1231,7 +1017,7 @@ function bind() {
       const voice = state.voices.find((item) => item.voice_id === voiceId);
       const label = voice?.display_name || voiceId;
 
-      if (!(await confirmArchive(label))) {
+      if (!await confirmArchive(label)) {
         return;
       }
 
@@ -1250,51 +1036,33 @@ function bind() {
 
     const voice = event.target.closest("[data-voice-play]");
     if (voice) {
-      try {
-        await playVoice(voice.dataset.voicePlay);
-      } catch (error) {
-        toast(error.message, "error");
-      }
+      try { await playVoice(voice.dataset.voicePlay); } catch (error) { toast(error.message, "error"); }
     }
   });
 
   $("#quote-mode").addEventListener("change", () => {
     selectControls.get("quote-voice-select")?.close();
-    $("#quote-voice-wrap").classList.toggle(
-      "hidden",
-      $("#quote-mode").value !== "two_voice",
-    );
+    $("#quote-voice-wrap").classList.toggle("hidden", $("#quote-mode").value !== "two_voice");
   });
 
   $("#generation-form").addEventListener("submit", async (event) => {
     event.preventDefault();
-    try {
-      await createGeneration();
-    } catch (error) {
-      toast(error.message, "error");
-    }
+    try { await createGeneration(); } catch (error) { toast(error.message, "error"); }
   });
 
   $("#add-voice-button").addEventListener("click", () => {
     resetDropzone();
     $("#voice-dialog").showModal();
   });
-  $("#voice-dialog-close").addEventListener("click", () =>
-    $("#voice-dialog").close(),
-  );
+  $("#voice-dialog-close").addEventListener("click", () => $("#voice-dialog").close());
   $("#voice-form").addEventListener("submit", async (event) => {
     event.preventDefault();
     try {
-      await createVoice(
-        $("#voice-name").value.trim(),
-        $("#voice-file").files[0],
-      );
+      await createVoice($("#voice-name").value.trim(), $("#voice-file").files[0]);
       $("#voice-dialog").close();
       event.target.reset();
       resetDropzone();
-    } catch (error) {
-      toast(error.message, "error");
-    }
+    } catch (error) { toast(error.message, "error"); }
   });
 
   $("#login-form").addEventListener("submit", async (event) => {
@@ -1303,10 +1071,7 @@ function bind() {
     const response = await fetch("/auth/login", {
       method: "POST",
       credentials: "same-origin",
-      headers: {
-        "Content-Type": "application/json",
-        Accept: "application/json",
-      },
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
       body: JSON.stringify({ code: $("#login-code").value }),
     });
 
@@ -1317,11 +1082,7 @@ function bind() {
 
     $("#login-code").value = "";
     showStudio();
-    try {
-      await bootstrapData();
-    } catch (error) {
-      toast(error.message, "error");
-    }
+    try { await bootstrapData(); } catch (error) { toast(error.message, "error"); }
   });
 
   $("#logout-button").addEventListener("click", async () => {
@@ -1338,18 +1099,10 @@ async function restoreRoute() {
     try {
       await openPost(postId);
       if (generationId) {
-        $(
-          `.generation-card[data-generation-id="${cssEscape(generationId)}"]`,
-        )?.scrollIntoView({ block: "center" });
-        const generation = (state.currentPost?.generations || []).find(
-          (item) => item.generation_id === generationId,
-        );
+        $(`.generation-card[data-generation-id="${cssEscape(generationId)}"]`)?.scrollIntoView({ block: "center" });
+        const generation = (state.currentPost?.generations || []).find(item => item.generation_id === generationId);
         if (generation?.generation_status === "COMPLETED") {
-          try {
-            await playGeneration(generationId);
-          } catch (error) {
-            toast(error.message, "error");
-          }
+          try { await playGeneration(generationId); } catch (error) { toast(error.message, "error"); }
         }
       }
       return;
@@ -1380,12 +1133,9 @@ async function bootstrap() {
   }
 
   showStudio();
-  try {
-    await bootstrapData();
-  } catch (error) {
-    toast(error.message, "error");
-  }
+  try { await bootstrapData(); } catch (error) { toast(error.message, "error"); }
 }
+
 
 $("#tempo-percent")?.addEventListener("input", syncTempoControl);
 syncTempoControl();
@@ -1396,19 +1146,14 @@ function confirmArchive(label) {
   if (dialog.open) return Promise.resolve(false);
   const trigger = document.activeElement;
   $("#confirmation-title").textContent = "Archive voice";
-  $("#confirmation-message").textContent =
-    `Archive "${label}"? Existing generations stay pinned, but it cannot be used for new audio.`;
+  $("#confirmation-message").textContent = `Archive "${label}"? Existing generations stay pinned, but it cannot be used for new audio.`;
   $("#confirmation-accept").textContent = "Archive voice";
   dialog.returnValue = "";
   return new Promise((resolve) => {
-    dialog.addEventListener(
-      "close",
-      () => {
-        if (trigger?.isConnected) trigger.focus();
-        resolve(dialog.returnValue === "confirm");
-      },
-      { once: true },
-    );
+    dialog.addEventListener("close", () => {
+      if (trigger?.isConnected) trigger.focus();
+      resolve(dialog.returnValue === "confirm");
+    }, { once: true });
     dialog.showModal();
     $("#confirmation-cancel").focus();
   });
