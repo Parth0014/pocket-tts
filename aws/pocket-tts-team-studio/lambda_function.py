@@ -666,6 +666,43 @@ def _generations(post_id: str) -> list[dict[str, Any]]:
     return values
 
 
+def _voice_generations(voice_id: str) -> dict[str, Any]:
+    """Find historical narrator and quote uses, including every scan page."""
+    kwargs: dict[str, Any] = {
+        "TableName": APP_TABLE,
+        "FilterExpression": "attribute_exists(generation_id) AND studio_origin = :origin AND (voice_id = :voice OR quote_voice_id = :voice)",
+        "ExpressionAttributeValues": {
+            ":origin": {"S": "TEAM_STUDIO"}, ":voice": {"S": voice_id},
+        },
+    }
+    items = []
+    while True:
+        response = _ddb.scan(**kwargs)
+        for raw in response.get("Items", []):
+            item = _python_item(raw)
+            if (not _is_generation_item(item)
+                    or item.get("studio_origin") != "TEAM_STUDIO"
+                    or voice_id not in (item.get("voice_id"), item.get("quote_voice_id"))):
+                continue
+            items.append({key: item.get(key) for key in (
+                "generation_id", "source_post_id", "voice_id", "quote_voice_id",
+                "generation_status", "review_status", "created_at",
+            )})
+        last = response.get("LastEvaluatedKey")
+        if not last:
+            break
+        kwargs["ExclusiveStartKey"] = last
+    items.sort(key=lambda item: str(item.get("created_at") or ""), reverse=True)
+    if items:
+        try:
+            titles = {post["id"]: post.get("title") for post in _catalog()}
+        except Exception:
+            titles = {}  # History remains accessible if the story catalog is unavailable.
+        for item in items:
+            item["post_title"] = titles.get(item.get("source_post_id"))
+    return {"items": items}
+
+
 def _post_detail(post_id: str) -> dict[str, Any]:
     post = _post_by_id(post_id)
     document = _canonical(post)
@@ -1388,6 +1425,10 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
 
         if method == "GET" and path == "/studio-api/voices":
             return _json(200, {"items": _scan_voices()})
+
+        match = re.fullmatch(r"/studio-api/voices/(voice_[0-9a-f]{32})/generations", path)
+        if method == "GET" and match is not None:
+            return _json(200, _voice_generations(match.group(1)))
 
         if method == "POST" and path == "/studio-api/voices":
             return _json(201, _create_voice(_body(event)))

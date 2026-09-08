@@ -244,6 +244,7 @@ function voiceCard(voice) {
       <div class="voice-foot">
         ${pill(voice.status || "UNKNOWN")}
         <div class="voice-actions">
+          <button type="button" class="play-button" data-voice-generations="${esc(voice.voice_id)}">View generations</button>
           <button class="play-button" data-voice-play="${esc(voice.voice_id)}">▶ Reference</button>
           ${
             voice.status === "ACTIVE"
@@ -401,6 +402,29 @@ function initSelectControls() {
     viewportWidth = window.innerWidth;
     selectControls.forEach(control => control.close());
   });
+}
+
+let voiceHistoryRequest = 0;
+async function showVoiceGenerations(voiceId) {
+  const request = ++voiceHistoryRequest;
+  const dialog = $("#voice-generations-dialog");
+  const list = $("#voice-generations-list");
+  const voice = state.voices.find(item => item.voice_id === voiceId);
+  $("#voice-generations-title").textContent = `Generations — ${voice?.display_name || voiceId}`;
+  list.textContent = "Loading generations…";
+  if (!dialog.open) dialog.showModal();
+  try {
+    const payload = await api(`/studio-api/voices/${encodeURIComponent(voiceId)}/generations`);
+    if (request !== voiceHistoryRequest) return;
+    const items = payload.items || [];
+    list.innerHTML = items.length ? `<p>${items.length} generation${items.length === 1 ? "" : "s"}</p>` + items.map(gen => {
+      const href = `/studio?post=${encodeURIComponent(gen.source_post_id)}&gen=${encodeURIComponent(gen.generation_id)}`;
+      const role = gen.voice_id === voiceId ? (gen.quote_voice_id === voiceId ? "Narrator and quote voice" : "Narrator") : "Quote voice";
+      return `<article class="voice-history-item"><strong>${esc(gen.post_title || gen.source_post_id || "Story unavailable")}</strong><p>${esc(gen.created_at || "")} · ${role}</p><p>${esc(gen.generation_status || "NOT QUEUED")} · ${esc(gen.review_status || "DRAFT")}</p>${gen.source_post_id ? `<a class="small-button" href="${esc(href)}">${gen.generation_status === "COMPLETED" ? "Open and listen" : "Open generation"}</a>` : ""}</article>`;
+    }).join("") : '<div class="empty"><strong>No generations yet</strong>This voice has not been used in any generations.</div>';
+  } catch (error) {
+    if (request === voiceHistoryRequest) list.textContent = `Could not load generations: ${error.message}`;
+  }
 }
 
 function renderVoices() {
@@ -981,6 +1005,12 @@ function bind() {
       return;
     }
 
+    const voiceHistory = event.target.closest("[data-voice-generations]");
+    if (voiceHistory) {
+      await showVoiceGenerations(voiceHistory.dataset.voiceGenerations);
+      return;
+    }
+
     const archive = event.target.closest("[data-voice-archive]");
     if (archive) {
       const voiceId = archive.dataset.voiceArchive;
@@ -1069,7 +1099,11 @@ async function restoreRoute() {
     try {
       await openPost(postId);
       if (generationId) {
-        try { await playGeneration(generationId); } catch (error) { toast(error.message, "error"); }
+        $(`.generation-card[data-generation-id="${cssEscape(generationId)}"]`)?.scrollIntoView({ block: "center" });
+        const generation = (state.currentPost?.generations || []).find(item => item.generation_id === generationId);
+        if (generation?.generation_status === "COMPLETED") {
+          try { await playGeneration(generationId); } catch (error) { toast(error.message, "error"); }
+        }
       }
       return;
     } catch (error) {
