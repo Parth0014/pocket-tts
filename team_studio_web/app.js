@@ -297,6 +297,19 @@ function initSelectControls() {
     const label = select.previousElementSibling;
     const labelText = label.textContent.trim();
     const wrapper = document.createElement("div");
+    wrapper.className = "select-control";
+    wrapper.innerHTML = `
+      <button type="button" id="${id}-trigger" class="select-trigger" role="combobox" aria-haspopup="listbox" aria-expanded="false" aria-controls="${id}-options" aria-labelledby="${id}-label ${id}-value">
+        <span id="${id}-value" class="select-value"></span>
+        <svg class="icon" aria-hidden="true"><use href="#icon-chevron-down"></use></svg>
+      </button>
+      <div class="select-menu hidden">
+        ${searchable ? `<div class="select-search"><svg class="icon" aria-hidden="true"><use href="#icon-search"></use></svg><input type="search" autocomplete="off" placeholder="Search voices..." aria-label="Search ${labelText.toLowerCase()} options" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="${id}-options"></div>` : ""}
+        <div id="${id}-options" class="select-options" role="listbox" aria-label="${labelText}"></div>
+        <p class="select-empty hidden" role="status">No matching voices. Try another name.</p>
+        <div class="select-count" aria-live="polite"></div>
+      </div>`;
+    label.id = `${id}-label`;
     label.htmlFor = `${id}-trigger`;
     select.classList.add("visually-hidden");
     select.tabIndex = -1;
