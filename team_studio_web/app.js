@@ -291,19 +291,26 @@ function initSelectControls() {
     const label = select.previousElementSibling;
     const labelText = label.textContent.trim();
     const wrapper = document.createElement("div");
-    wrapper.className = "select-control";
-    wrapper.innerHTML = `
-      <button type="button" id="${id}-trigger" class="select-trigger" role="combobox" aria-haspopup="listbox" aria-expanded="false" aria-controls="${id}-options" aria-labelledby="${id}-label ${id}-value">
-        <span id="${id}-value" class="select-value"></span>
-        <svg class="icon" aria-hidden="true"><use href="#icon-chevron-down"></use></svg>
-      </button>
-      <div class="select-menu hidden">
-        ${searchable ? `<div class="select-search"><svg class="icon" aria-hidden="true"><use href="#icon-search"></use></svg><input type="search" autocomplete="off" placeholder="Search voices..." aria-label="Search ${labelText.toLowerCase()} options" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="${id}-options"></div>` : ""}
-        <div id="${id}-options" class="select-options" role="listbox" aria-label="${labelText}"></div>
-        <p class="select-empty hidden" role="status">No matching voices. Try another name.</p>
-        <div class="select-count" aria-live="polite"></div>
-      </div>`;
-    label.id = `${id}-label`;
+        <div class="voice-card-head">
+          <div class="voice-icon" aria-hidden="true">◖</div>
+          <span class="voice-type">Reference voice</span>
+          ${pill(voice.status || "UNKNOWN")}
+        </div>
+        <div class="voice-card-body">
+          <h3>${esc(voice.display_name || "Unnamed voice")}</h3>
+          <div class="voice-id" title="${esc(voice.voice_id)}">${esc(voice.voice_id)}</div>
+        </div>
+        <div class="voice-card-foot">
+          <button type="button" class="play-button voice-listen-button" data-voice-play="${esc(voice.voice_id)}">
+            <svg class="icon" aria-hidden="true"><use href="#icon-play"></use></svg>
+            <span>Listen</span>
+          </button>
+          <button type="button" class="play-button voice-history-button" data-voice-generations="${esc(voice.voice_id)}">View generations</button>
+          ${
+            voice.status === "ACTIVE"
+              ? `<button type="button" class="play-button archive-button" data-voice-archive="${esc(voice.voice_id)}">Archive</button>`
+              : ""
+          }
     label.htmlFor = `${id}-trigger`;
     select.classList.add("visually-hidden");
     select.tabIndex = -1;
