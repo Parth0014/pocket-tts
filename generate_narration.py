@@ -15,7 +15,6 @@ from the original PocketTTS_narration.py almost unchanged.
 """
 
 import argparse
-from collections import OrderedDict
 import hashlib
 import inspect
 import json
@@ -26,6 +25,7 @@ import subprocess
 import sys
 import tempfile
 import time
+from collections import OrderedDict
 from datetime import datetime, timezone
 from importlib import metadata as importlib_metadata
 
@@ -1172,6 +1172,7 @@ def run_pipeline(
     quote_reference_start_seconds=None,
     seed=SEED,
     max_chunks=None,
+    mastering="auto",
 ):
     """Generate local audio and an audit report; shared by CLI and AWS worker.
 
@@ -1196,6 +1197,8 @@ def run_pipeline(
             "in 0.02 steps, or a supported legacy pace"
         )
     settings = get_profile(profile)
+    if mastering not in {"off", "auto", "natural", "warm_story"}:
+        raise ValueError("mastering must be off, auto, natural, or warm_story")
     if isinstance(seed, bool) or not isinstance(seed, int) or not 0 <= seed < 2**31:
         raise ValueError("seed must be an integer in [0, 2147483647]")
     if max_chunks is not None and (
@@ -1236,6 +1239,8 @@ def run_pipeline(
     }
 
     ffmpeg_path = validate_runtime_config(config)
+    if mastering != "off" and ffmpeg_path is None:
+        ffmpeg_path = resolve_ffmpeg()
 
     print("=" * 72)
     print("PocketTTS - Long-Form Cloned-Voice Narration (block-aware)")
@@ -1584,6 +1589,22 @@ def run_pipeline(
             )
 
     joined_audio = torch.cat(pieces, dim=1)
+    mastering_report = None
+    if mastering == "auto" and joined_audio.shape[1] / sr < 3:
+        mastering_report = {
+            "profile": "auto", "status": "skipped_short_audio",
+            "warnings": ["Under 3 seconds: retained the existing render; loudness mastering was not applied."],
+        }
+    elif mastering != "off":
+        from narration_mastering import master_audio
+
+        # Preserve legacy activity detection/pause placement, then undo its shared
+        # peak gain so mastering receives the original assembled signal level.
+        premaster = (joined_audio / shared_gain).squeeze(0).cpu().numpy()
+        mastered, mastering_report = master_audio(
+            premaster, sr, mastering, ffmpeg=ffmpeg_path, temp_dir=config["internal_dir"],
+        )
+        joined_audio = torch.from_numpy(mastered).unsqueeze(0)
 
     # Reserve only when the render is ready so concurrent runs cannot collide.
     final_output = reserve_numbered_output_path(config["output_dir"])
@@ -1605,6 +1626,8 @@ def run_pipeline(
 
     generation_time = time.time() - generation_start
     duration = joined_audio.shape[1] / sr
+    if mastering_report is not None:
+        mastering_report["output_sha256"] = sha256_file(final_output)
     atomic_write_json(os.path.splitext(final_output)[0] + ".json", {
         "schema_version": 1, "profile": settings.name, "settings": settings.to_dict(),
         "seed": seed, "speed": render_speed, "preview": max_chunks is not None,
@@ -1612,6 +1635,7 @@ def run_pipeline(
         "reference_anchors": anchor_metadata, "models": identities,
         "chunks": chunk_reports, "output_sha256": sha256_file(final_output),
         "duration_seconds": duration, "generation_seconds": generation_time,
+        **({"mastering": mastering_report} if mastering_report is not None else {}),
         "warnings": [warning for entry in chunk_reports for warning in entry["quality"]["warnings"]],
         "assessment": "Signal validation passed; voice similarity, word accuracy and storytelling require audition.",
     })
@@ -1649,6 +1673,7 @@ def main(argv=None):
     parser.add_argument("--reference-start", type=float, default=config["reference_start_seconds"])
     parser.add_argument("--quote-reference-start", type=float, default=config["quote_reference_start_seconds"])
     parser.add_argument("--max-chunks", type=int, help="Limit generation for a short preview")
+    parser.add_argument("--mastering", choices=("off", "auto", "natural", "warm_story"), default="auto")
     parser.add_argument("--output-dir", default=config["output_dir"])
     args = parser.parse_args(argv)
     return run_pipeline(
@@ -1657,7 +1682,7 @@ def main(argv=None):
         output_dir=args.output_dir, profile=args.profile, speed=args.speed,
         reference_start_seconds=args.reference_start,
         quote_reference_start_seconds=args.quote_reference_start,
-        seed=args.seed, max_chunks=args.max_chunks,
+        seed=args.seed, max_chunks=args.max_chunks, mastering=args.mastering,
     )
 
 

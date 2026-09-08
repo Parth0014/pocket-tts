@@ -119,6 +119,24 @@ def test_profile_changes_invalidate_raw_cache(pipeline_fixture):
     assert not any(item["cache_hit"] for item in report["chunks"])
 
 
+def test_mastering_preserves_timing_and_raw_cache(pipeline_fixture):
+    source, reference, calls, output = pipeline_fixture
+    source.write_text(source.read_text() + "<p>Then she sat down to tell her story.</p>")
+    original = narration.run_pipeline(source, reference, output_dir=output, mastering="off")
+    count = len(calls["generate"])
+    mastered = narration.run_pipeline(source, reference, output_dir=output)
+    report = json.loads(Path(mastered).with_suffix(".json").read_text())
+    assert len(calls["generate"]) == count
+    assert all(chunk["cache_hit"] for chunk in report["chunks"])
+    assert sf.info(original).frames == sf.info(mastered).frames
+    assert report["mastering"]["output_sha256"] == report["output_sha256"]
+    assert report["mastering"]["profile"] == "auto"
+    assert report["mastering"]["decisions"]
+    assert abs(report["mastering"]["after"]["input_i"] + 19) < 1
+    bypass = narration.run_pipeline(source, reference, output_dir=output, mastering="off")
+    assert Path(original).read_bytes() == Path(bypass).read_bytes()
+
+
 def test_token_counter_uses_model_normalization_and_does_not_guess():
     seen = []
 
