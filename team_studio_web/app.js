@@ -261,20 +261,26 @@ async function loadPosts(page = 1) {
 function voiceCard(voice) {
   return `
     <article class="voice-card">
-      <div class="voice-icon">◖</div>
-      <h3>${esc(voice.display_name || "Unnamed voice")}</h3>
-      <div class="voice-id">${esc(voice.voice_id)}</div>
-      <div class="voice-foot">
+      <div class="voice-card-head">
+        <div class="voice-icon" aria-hidden="true">◖</div>
+        <span class="voice-type">Reference voice</span>
         ${pill(voice.status || "UNKNOWN")}
-        <div class="voice-actions">
-          <button type="button" class="play-button" data-voice-generations="${esc(voice.voice_id)}">View generations</button>
-          <button class="play-button" data-voice-play="${esc(voice.voice_id)}">▶ Reference</button>
-          ${
-            voice.status === "ACTIVE"
-              ? `<button class="play-button archive-button" data-voice-archive="${esc(voice.voice_id)}">Archive</button>`
-              : ""
-          }
-        </div>
+      </div>
+      <div class="voice-card-body">
+        <h3>${esc(voice.display_name || "Unnamed voice")}</h3>
+        <div class="voice-id" title="${esc(voice.voice_id)}">${esc(voice.voice_id)}</div>
+      </div>
+      <div class="voice-card-foot">
+        <button type="button" class="play-button voice-listen-button" data-voice-play="${esc(voice.voice_id)}">
+          <svg class="icon" aria-hidden="true"><use href="#icon-play"></use></svg>
+          <span>Listen</span>
+        </button>
+        <button type="button" class="play-button voice-history-button" data-voice-generations="${esc(voice.voice_id)}">View generations</button>
+        ${
+          voice.status === "ACTIVE"
+            ? `<button type="button" class="play-button archive-button" data-voice-archive="${esc(voice.voice_id)}">Archive</button>`
+            : ""
+        }
       </div>
     </article>`;
 }
@@ -291,26 +297,6 @@ function initSelectControls() {
     const label = select.previousElementSibling;
     const labelText = label.textContent.trim();
     const wrapper = document.createElement("div");
-        <div class="voice-card-head">
-          <div class="voice-icon" aria-hidden="true">◖</div>
-          <span class="voice-type">Reference voice</span>
-          ${pill(voice.status || "UNKNOWN")}
-        </div>
-        <div class="voice-card-body">
-          <h3>${esc(voice.display_name || "Unnamed voice")}</h3>
-          <div class="voice-id" title="${esc(voice.voice_id)}">${esc(voice.voice_id)}</div>
-        </div>
-        <div class="voice-card-foot">
-          <button type="button" class="play-button voice-listen-button" data-voice-play="${esc(voice.voice_id)}">
-            <svg class="icon" aria-hidden="true"><use href="#icon-play"></use></svg>
-            <span>Listen</span>
-          </button>
-          <button type="button" class="play-button voice-history-button" data-voice-generations="${esc(voice.voice_id)}">View generations</button>
-          ${
-            voice.status === "ACTIVE"
-              ? `<button type="button" class="play-button archive-button" data-voice-archive="${esc(voice.voice_id)}">Archive</button>`
-              : ""
-          }
     label.htmlFor = `${id}-trigger`;
     select.classList.add("visually-hidden");
     select.tabIndex = -1;
