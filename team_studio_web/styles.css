@@ -4000,3 +4000,34 @@ dialog form {
   #voice-generations-dialog .dialog-head { padding: 18px; }
   #voice-generations-list { padding: 0 18px 18px; }
 }
+
+/* Voice lifecycle filters and shared Studio motion. */
+.voice-filters { display: inline-flex; flex-wrap: wrap; gap: 4px; padding: 5px; margin-bottom: 24px; border: 1px solid var(--line); border-radius: 13px; background: var(--surface-soft); }
+.voice-filter { display: inline-flex; align-items: center; gap: 10px; min-height: 42px; padding: 8px 16px; border: 1px solid transparent; border-radius: 9px; background: transparent; color: var(--muted); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
+.voice-filter[aria-pressed="true"] { color: var(--ink); background: var(--surface); border-color: var(--line); box-shadow: var(--shadow-xs); }
+.voice-filter span { min-width: 22px; padding: 3px 6px; border-radius: 6px; background: var(--surface-soft); font-size: 11px; font-variant-numeric: tabular-nums; }
+.voice-filter[aria-pressed="true"] span { color: var(--accent-strong); background: var(--accent-soft); }
+#voice-grid .restore-button { color: var(--accent-strong); border-color: var(--line); background: var(--accent-soft); }
+#voice-grid .pill.archived { color: var(--muted); background: var(--surface-soft); }
+html { scrollbar-gutter: stable; }
+body:has(dialog[open]) { overflow: hidden; }
+.reference-dialog[open] { display: flex; flex-direction: column; overflow: hidden; }
+.reference-dialog form { min-height: 0; max-height: calc(100dvh - 100px); overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; }
+.reference-add-dialog form { overflow: hidden; grid-template-rows: auto minmax(0, 1fr) auto; }
+.reference-add-list { min-height: 0; max-height: min(52dvh, 520px); overscroll-behavior: contain; }
+:is(dialog, .reference-add-list, .reference-folder-list, .document-preview, .select-options) { scrollbar-width: thin; scrollbar-color: var(--line-strong) transparent; }
+@media (prefers-reduced-motion: no-preference) {
+  :is(html, dialog, .reference-add-list, .reference-folder-list, .document-preview, .select-options) { scroll-behavior: smooth; }
+  :is(.nav-item, .voice-filter, .reference-folder-row, .reference-preview-button, .reference-favorite, .button, .small-button, .play-button) { transition: background-color 180ms ease, color 180ms ease, border-color 180ms ease, box-shadow 180ms ease, opacity 180ms ease; }
+  .view { animation: studio-view-enter 280ms var(--ease) both; }
+  :is(#voice-grid .voice-card, .reference-audio-card) { animation: studio-card-enter 220ms var(--ease) both; }
+  dialog[open] { animation: studio-dialog-enter 240ms var(--ease) both; }
+  dialog[open]::backdrop { animation: studio-backdrop-enter 200ms ease both; }
+}
+@keyframes studio-view-enter { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+@keyframes studio-card-enter { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+@keyframes studio-dialog-enter { from { opacity: 0; transform: translateY(10px) scale(.985); } to { opacity: 1; transform: none; } }
+@keyframes studio-backdrop-enter { from { opacity: 0; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) {
+  :is(html, dialog, .reference-add-list, .reference-folder-list, .document-preview, .select-options) { scroll-behavior: auto !important; }
+}

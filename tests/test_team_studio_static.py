@@ -112,8 +112,11 @@ def test_team_generations_are_origin_scoped():
     assert '":origin": {"S": "TEAM_STUDIO"}' in source
 
 
-def test_voice_cards_show_only_active_registry_entries():
+def test_voice_cards_filter_archived_but_narration_choices_stay_active():
     frontend = JS.read_text(encoding="utf-8")
 
     assert 'const active = state.voices.filter((voice) => voice.status === "ACTIVE")' in frontend
-    assert "active.map(voiceCard)" in frontend
+    assert 'state.voiceFilter === "DISABLED" ? archived : active' in frontend
+    assert "visible.map(voiceCard)" in frontend
+    assert "const options = active.map" in frontend
+    assert "data-voice-restore" in frontend

@@ -2,6 +2,7 @@ const state = {
   runtime: null,
   posts: [],
   voices: [],
+  voiceFilter: "ACTIVE",
   currentPost: null,
   page: 1,
   pages: 1,
@@ -238,7 +239,7 @@ async function loadPosts(page = 1) {
 function voiceCard(voice) {
   return `
     <article class="voice-card">
-      <div class="voice-card-top"><div class="voice-icon" aria-hidden="true"></div>${pill(voice.status || "UNKNOWN")}</div>
+      <div class="voice-card-top"><div class="voice-icon" aria-hidden="true"></div>${pill(voice.status === "DISABLED" ? "ARCHIVED" : voice.status || "UNKNOWN")}</div>
       <h3>${esc(voice.display_name || "Unnamed voice")}</h3>
       <div class="voice-id">${esc(voice.voice_id)}</div>
       <div class="voice-foot">
@@ -248,7 +249,7 @@ function voiceCard(voice) {
           ${
             voice.status === "ACTIVE"
               ? `<button class="play-button archive-button" data-voice-archive="${esc(voice.voice_id)}">Archive</button>`
-              : ""
+              : voice.status === "DISABLED" ? `<button type="button" class="play-button restore-button" data-voice-restore="${esc(voice.voice_id)}">Restore voice</button>` : ""
           }
         </div>
       </div>
@@ -431,9 +432,18 @@ function renderVoices() {
   const quoteVoiceId = $("#quote-voice-select").value;
   const active = state.voices.filter((voice) => voice.status === "ACTIVE");
 
-  $("#voice-grid").innerHTML = active.length
-    ? active.map(voiceCard).join("")
-    : `<div class="empty"><strong>No active voices</strong>Add a reference WAV.</div>`;
+  const archived = state.voices.filter(voice => voice.status === "DISABLED");
+  const visible = state.voiceFilter === "DISABLED" ? archived : active;
+  $("#voice-active-count").textContent = active.length;
+  $("#voice-archived-count").textContent = archived.length;
+  document.querySelectorAll("[data-voice-filter]").forEach(button => {
+    button.setAttribute("aria-pressed", String(button.dataset.voiceFilter === state.voiceFilter));
+  });
+  $("#voice-grid").innerHTML = visible.length
+    ? visible.map(voiceCard).join("")
+    : state.voiceFilter === "DISABLED"
+      ? `<div class="empty"><strong>No archived voices</strong>Voices you archive will appear here. You can restore them anytime.</div>`
+      : `<div class="empty"><strong>No active voices</strong>Add a reference WAV or restore a voice from Archived.</div>`;
 
   const options = active.map((voice) =>
     `<option value="${esc(voice.voice_id)}">${esc(voice.display_name || voice.voice_id)}</option>`
@@ -1007,6 +1017,30 @@ function bind() {
     const voiceHistory = event.target.closest("[data-voice-generations]");
     if (voiceHistory) {
       await showVoiceGenerations(voiceHistory.dataset.voiceGenerations);
+      return;
+    }
+
+    const filter = event.target.closest("[data-voice-filter]");
+    if (filter) {
+      state.voiceFilter = filter.dataset.voiceFilter;
+      renderVoices();
+      return;
+    }
+
+    const restore = event.target.closest("[data-voice-restore]");
+    if (restore) {
+      restore.disabled = true;
+      restore.textContent = "Restoring...";
+      try {
+        await api(`/studio-api/voices/${encodeURIComponent(restore.dataset.voiceRestore)}/restore`, {method: "POST", body: {}});
+        await loadVoices();
+        toast("Voice restored. Available in Active voices.");
+      } catch (error) {
+        toast(error.message, "error");
+      } finally {
+        restore.disabled = false;
+        restore.textContent = "Restore voice";
+      }
       return;
     }
 

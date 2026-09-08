@@ -6,7 +6,7 @@
     <meta name="color-scheme" content="light">
     <meta name="theme-color" content="#211a24" />
     <title>Narration Studio</title>
-    <link rel="stylesheet" href="/studio/styles.css?v=20260908-refinement" />
+    <link rel="stylesheet" href="/studio/styles.css?v=20260908-voice-lifecycle" />
   </head>
   <body>
     <!-- Shared SVG icon system. Icons inherit the surrounding text colour. -->
@@ -237,7 +237,11 @@
 
 
 
-        <div id="voice-grid" class="voice-grid"></div>
+        <div class="voice-filters" role="group" aria-label="Filter voices">
+          <button type="button" class="voice-filter" data-voice-filter="ACTIVE" aria-pressed="true" aria-controls="voice-grid">Active <span id="voice-active-count">0</span></button>
+          <button type="button" class="voice-filter" data-voice-filter="DISABLED" aria-pressed="false" aria-controls="voice-grid">Archived <span id="voice-archived-count">0</span></button>
+        </div>
+        <div id="voice-grid" class="voice-grid" aria-live="polite"></div>
         </section>
 
       <section id="references-view" class="view hidden">
@@ -274,7 +278,7 @@
         </section>
         <dialog aria-labelledby="reference-folder-dialog-title" id="reference-folder-dialog" class="modal reference-dialog">
           <form id="reference-folder-form" method="dialog">
-            <div class="modal-head"><div><p class="eyebrow">Reference library</p><h3 id="reference-folder-dialog-title">Create folder</h3></div><button type="button" class="icon-button" data-reference-close aria-label="Close"><svg class="icon" aria-hidden="true"><use href="#icon-close"></use></svg></button></div>
+            <div class="modal-head"><div><p class="eyebrow">Reference library</p><h3 id="reference-folder-dialog-title">Create folder</h3></div></div>
             <label><span>Folder name</span><input id="reference-folder-name" maxlength="80" required placeholder="e.g. Warm / Emotional"></label>
             <p class="reference-form-hint">Only the folder name is required.</p>
             <div class="dialog-actions"><button type="button" class="button ghost" data-reference-close>Cancel</button><button type="submit" class="button primary">Save folder</button></div>
@@ -282,14 +286,14 @@
         </dialog>
         <dialog aria-labelledby="reference-add-heading" id="reference-add-dialog" class="modal reference-dialog reference-add-dialog">
           <form id="reference-add-form" method="dialog">
-            <div class="modal-head"><div><p class="eyebrow">Reference library</p><h3 id="reference-add-heading">Add voices</h3><p>Select as many voices as you want. No alias or description is required.</p></div><button type="button" class="icon-button" data-reference-close aria-label="Close"><svg class="icon" aria-hidden="true"><use href="#icon-close"></use></svg></button></div>
+            <div class="modal-head"><div><p class="eyebrow">Reference library</p><h3 id="reference-add-heading">Add voices</h3><p>Select as many voices as you want. No alias or description is required.</p></div></div>
             <div id="reference-add-list" class="reference-add-list"></div>
             <div class="dialog-actions"><button type="button" class="button ghost" data-reference-close>Cancel</button><button id="reference-add-submit" type="submit" class="button primary" disabled>Add selected voices</button></div>
           </form>
         </dialog>
         <dialog aria-labelledby="reference-meta-heading" id="reference-meta-dialog" class="modal reference-dialog">
           <form id="reference-meta-form" method="dialog">
-            <div class="modal-head"><div><p class="eyebrow">Optional details</p><h3 id="reference-meta-heading">Reference voice</h3></div><button type="button" class="icon-button" data-reference-close aria-label="Close"><svg class="icon" aria-hidden="true"><use href="#icon-close"></use></svg></button></div>
+            <div class="modal-head"><div><p class="eyebrow">Optional details</p><h3 id="reference-meta-heading">Reference voice</h3></div></div>
             <label><span>Alias <small>Optional</small></span><input id="reference-alias" maxlength="80" placeholder="e.g. Phoebe — soft essay"></label>
             <label><span>Short description <small>Optional</small></span><textarea id="reference-description" maxlength="280" rows="3" placeholder="e.g. Gentle, intimate, good for reflective pieces"></textarea></label>
             <label class="reference-favorite-check"><input id="reference-favorite-checkbox" type="checkbox"><span>Favorite</span></label>
@@ -601,7 +605,7 @@
       </form>
     </dialog>
 
-    <script type="module" src="/studio/app.js?v=20260908-refinement"></script>
-    <script src="/studio/reference-library.js?v=20260908-refinement" defer></script>
+    <script type="module" src="/studio/app.js?v=20260908-voice-lifecycle"></script>
+    <script src="/studio/reference-library.js?v=20260908-voice-lifecycle" defer></script>
 </body>
 </html>

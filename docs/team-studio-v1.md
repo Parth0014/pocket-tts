@@ -96,8 +96,12 @@ New generations created through this surface are stamped
 that marker. Earlier integration and quality-baseline generation rows remain
 intact for audit but do not appear in the team interface.
 
-The Voice Library displays ACTIVE voices by default. Archived/DISABLED
-registry records remain preserved but do not clutter narrator selection.
+The Voice Library opens on Active voices and has an Archived filter with counts.
+Archived/DISABLED voices retain their reference preview and generation history.
+Restore voice returns them to ACTIVE through the authenticated POST
+`/studio-api/voices/<voice_id>/restore` route. Restoration conditionally changes
+only status and updated_at, preserves voice identity and audio, and is idempotent.
+Only ACTIVE voices appear in narrator and quote-voice selection.
 
 ## Shared Reference Audio Library
 

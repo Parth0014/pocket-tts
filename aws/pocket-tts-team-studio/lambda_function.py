@@ -1302,6 +1302,61 @@ def _archive_voice(voice_id: str) -> dict[str, Any]:
         "already_archived": False,
     }
 
+def _restore_voice(voice_id: str) -> dict[str, Any]:
+    if _VOICE_ID_RE.fullmatch(voice_id) is None:
+        raise StudioError("voice_id is invalid")
+
+    _, repo = _service()
+    voice = repo.get_voice(voice_id)
+
+    if voice is None:
+        raise StudioError("voice was not found")
+
+    if voice.status is VoiceStatus.ACTIVE:
+        return {
+            "voice_id": voice.voice_id,
+            "display_name": voice.display_name,
+            "status": VoiceStatus.ACTIVE.value,
+            "restored": True,
+            "already_restored": True,
+        }
+
+    if voice.status is not VoiceStatus.DISABLED:
+        raise StudioError("voice is not archived")
+
+    now = _now()
+
+    try:
+        _ddb.update_item(
+            TableName=VOICE_TABLE,
+            Key={
+                "voice_id": {"S": voice_id},
+            },
+            ConditionExpression="#status = :disabled",
+            UpdateExpression="SET #status = :active, updated_at = :now",
+            ExpressionAttributeNames={
+                "#status": "status",
+            },
+            ExpressionAttributeValues={
+                ":disabled": {"S": VoiceStatus.DISABLED.value},
+                ":active": {"S": VoiceStatus.ACTIVE.value},
+                ":now": {"S": now},
+            },
+        )
+    except ClientError as exc:
+        if exc.response.get("Error", {}).get("Code") == "ConditionalCheckFailedException":
+            raise StudioError("voice status changed; refresh and retry") from None
+        raise
+
+    return {
+        "voice_id": voice.voice_id,
+        "display_name": voice.display_name,
+        "status": VoiceStatus.ACTIVE.value,
+        "restored": True,
+        "already_restored": False,
+    }
+
+
 
 def _voice_audio(voice_id: str) -> dict[str, Any]:
     if _VOICE_ID_RE.fullmatch(voice_id) is None:
@@ -1460,6 +1515,10 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
             return _json(200, _reference_folder_detail(match.group(1)))
         if method == "PATCH" and match is not None:
             return _json(200, _rename_reference_folder(match.group(1), _body(event)))
+
+        match = re.fullmatch(r"/studio-api/voices/(voice_[0-9a-f]{32})/restore", path)
+        if method == "POST" and match is not None:
+            return _json(200, _restore_voice(match.group(1)))
 
         match = _VOICE_ARCHIVE_PATH.fullmatch(path)
         if method == "POST" and match is not None:
