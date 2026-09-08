@@ -12,3 +12,4 @@ sample.html
 tests/
 README.md
 *.wav
+.venv-quality/

@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
-    <meta name="color-scheme" content="light">
+    <meta name="color-scheme" content="light" />
     <meta name="theme-color" content="#211a24" />
     <title>Narration Studio</title>
     <link rel="stylesheet" href="/studio/styles.css?v=20260906-compatible-ui" />
@@ -23,9 +23,11 @@
         <path d="M5.75 11.75a6.25 6.25 0 0 0 12.5 0M12 18v3M9 21h6" />
       </symbol>
       <symbol id="icon-folder" viewBox="0 0 24 24">
-      <path d="M3.75 6.25a2 2 0 0 1 2-2h4l2 2h6.5a2 2 0 0 1 2 2v9.5a2 2 0 0 1-2 2H5.75a2 2 0 0 1-2-2z"/>
-    </symbol>
-    <symbol id="icon-refresh" viewBox="0 0 24 24">
+        <path
+          d="M3.75 6.25a2 2 0 0 1 2-2h4l2 2h6.5a2 2 0 0 1 2 2v9.5a2 2 0 0 1-2 2H5.75a2 2 0 0 1-2-2z"
+        />
+      </symbol>
+      <symbol id="icon-refresh" viewBox="0 0 24 24">
         <path
           d="M19 7.5V3.75m0 0h-3.75M19 3.75l-2.6 2.6a7.25 7.25 0 1 0 1.72 7.4"
         />
@@ -143,10 +145,17 @@
             ></b>
             <span>Voices</span>
           </button>
-                <button class="nav-item" data-view="references" aria-label="Voice Folders">
-          <b class="nav-icon"><svg class="icon" aria-hidden="true"><use href="#icon-folder"></use></svg></b>
-          <span>Voice Folders</span>
-        </button>
+          <button
+            class="nav-item"
+            data-view="references"
+            aria-label="Voice Folders"
+          >
+            <b class="nav-icon"
+              ><svg class="icon" aria-hidden="true">
+                <use href="#icon-folder"></use></svg
+            ></b>
+            <span>Voice Folders</span>
+          </button>
         </nav>
 
         <div class="sidebar-foot">
@@ -235,68 +244,213 @@
             </button>
           </div>
 
-
-
-        <div id="voice-grid" class="voice-grid"></div>
+          <div id="voice-grid" class="voice-grid"></div>
         </section>
 
-      <section id="references-view" class="view hidden">
-        <section id="reference-library-shell" class="reference-library-shell" aria-label="Reference audio folders">
-          <div class="reference-library-head">
-            <div>
-              <p class="eyebrow">Saved reference audio</p>
-              <h2>Reference folders</h2>
-              <p>Create a folder, select voices, and you are done. Alias and description are optional.</p>
+        <section id="references-view" class="view hidden">
+          <section
+            id="reference-library-shell"
+            class="reference-library-shell"
+            aria-label="Reference audio folders"
+          >
+            <div class="reference-library-head">
+              <div>
+                <p class="eyebrow">Saved reference audio</p>
+                <h2>Reference folders</h2>
+                <p>
+                  Create a folder, select voices, and you are done. Alias and
+                  description are optional.
+                </p>
+              </div>
+              <button
+                id="reference-create-folder"
+                class="button ghost"
+                type="button"
+              >
+                + New folder
+              </button>
             </div>
-            <button id="reference-create-folder" class="button ghost" type="button">+ New folder</button>
-          </div>
-          <div class="reference-library-layout">
-            <aside class="reference-folder-panel">
-              <div class="reference-folder-panel-title"><strong>Folders</strong><span>Shared team library</span></div>
-              <div id="reference-folder-list" class="reference-folder-list"></div>
-            </aside>
-            <section class="reference-folder-content">
-              <div class="reference-folder-header">
-                <div><p class="eyebrow">Current folder</p><h3 id="reference-folder-title">Choose a folder</h3><p id="reference-folder-count">Create a folder to start collecting reference voices.</p></div>
-                <div id="reference-folder-actions" class="reference-folder-actions hidden">
-                  <button id="reference-add-voices" class="button primary" type="button">+ Add voices</button>
-                  <button id="reference-rename-folder" class="small-button" type="button">Rename</button>
-                  <button id="reference-archive-folder" class="small-button danger-soft" type="button">Archive</button>
+            <div class="reference-library-layout">
+              <aside class="reference-folder-panel">
+                <div class="reference-folder-panel-title">
+                  <strong>Folders</strong><span>Shared team library</span>
+                </div>
+                <div
+                  id="reference-folder-list"
+                  class="reference-folder-list"
+                ></div>
+              </aside>
+              <section class="reference-folder-content">
+                <div class="reference-folder-header">
+                  <div>
+                    <p class="eyebrow">Current folder</p>
+                    <h3 id="reference-folder-title">Choose a folder</h3>
+                    <p id="reference-folder-count">
+                      Create a folder to start collecting reference voices.
+                    </p>
+                  </div>
+                  <div
+                    id="reference-folder-actions"
+                    class="reference-folder-actions hidden"
+                  >
+                    <button
+                      id="reference-add-voices"
+                      class="button primary"
+                      type="button"
+                    >
+                      + Add voices
+                    </button>
+                    <button
+                      id="reference-rename-folder"
+                      class="small-button"
+                      type="button"
+                    >
+                      Rename
+                    </button>
+                    <button
+                      id="reference-archive-folder"
+                      class="small-button danger-soft"
+                      type="button"
+                    >
+                      Archive
+                    </button>
+                  </div>
+                </div>
+                <div class="reference-toolbar">
+                  <div class="search reference-search">
+                    <span aria-hidden="true">⌕</span
+                    ><input
+                      id="reference-search"
+                      type="search"
+                      placeholder="Search this folder"
+                      aria-label="Search this reference folder"
+                      disabled
+                    />
+                  </div>
+                  <label class="reference-sort-wrap"
+                    ><span>Sort</span
+                    ><select id="reference-sort">
+                      <option value="name">Name A–Z</option>
+                      <option value="favorite">Favorites first</option>
+                      <option value="recent">Recently added</option>
+                    </select></label
+                  >
+                </div>
+                <div id="reference-audio-grid" class="reference-audio-grid">
+                  <div class="reference-library-placeholder">
+                    <strong
+                      >Your saved reference voices will appear here.</strong
+                    ><span>Alias and description are always optional.</span>
+                  </div>
+                </div>
+              </section>
+            </div>
+          </section>
+          <dialog id="reference-folder-dialog" class="modal reference-dialog">
+            <form id="reference-folder-form" method="dialog">
+              <div class="modal-head">
+                <div>
+                  <p class="eyebrow">Reference library</p>
+                  <h3 id="reference-folder-dialog-title">Create folder</h3>
                 </div>
               </div>
-              <div class="reference-toolbar">
-                <div class="search reference-search"><span aria-hidden="true">⌕</span><input id="reference-search" type="search" placeholder="Search this folder" aria-label="Search this reference folder" disabled></div>
-                <label class="reference-sort-wrap"><span>Sort</span><select id="reference-sort"><option value="name">Name A–Z</option><option value="favorite">Favorites first</option><option value="recent">Recently added</option></select></label>
+              <label
+                ><span>Folder name</span
+                ><input
+                  id="reference-folder-name"
+                  maxlength="80"
+                  required
+                  placeholder="e.g. Warm / Emotional"
+              /></label>
+              <p class="reference-form-hint">
+                Only the folder name is required.
+              </p>
+              <div class="dialog-actions">
+                <button type="button" class="button ghost" data-reference-close>
+                  Cancel</button
+                ><button type="submit" class="button primary">
+                  Save folder
+                </button>
               </div>
-              <div id="reference-audio-grid" class="reference-audio-grid"><div class="reference-library-placeholder"><strong>Your saved reference voices will appear here.</strong><span>Alias and description are always optional.</span></div></div>
-            </section>
-          </div>
+            </form>
+          </dialog>
+          <dialog
+            id="reference-add-dialog"
+            class="modal reference-dialog reference-add-dialog"
+          >
+            <form id="reference-add-form" method="dialog">
+              <div class="modal-head">
+                <div>
+                  <p class="eyebrow">Reference library</p>
+                  <h3>Add voices</h3>
+                  <p>
+                    Select as many voices as you want. No alias or description
+                    is required.
+                  </p>
+                </div>
+              </div>
+              <div id="reference-add-list" class="reference-add-list"></div>
+              <div class="dialog-actions">
+                <button type="button" class="button ghost" data-reference-close>
+                  Cancel</button
+                ><button
+                  id="reference-add-submit"
+                  type="submit"
+                  class="button primary"
+                  disabled
+                >
+                  Add selected voices
+                </button>
+              </div>
+            </form>
+          </dialog>
+          <dialog id="reference-meta-dialog" class="modal reference-dialog">
+            <form id="reference-meta-form" method="dialog">
+              <div class="modal-head">
+                <div>
+                  <p class="eyebrow">Optional details</p>
+                  <h3 id="reference-meta-heading">Reference voice</h3>
+                </div>
+                <button
+                  type="button"
+                  class="icon-button"
+                  data-reference-close
+                  aria-label="Close"
+                >
+                  ×
+                </button>
+              </div>
+              <label
+                ><span>Alias <small>Optional</small></span
+                ><input
+                  id="reference-alias"
+                  maxlength="80"
+                  placeholder="e.g. Phoebe — soft essay"
+              /></label>
+              <label
+                ><span>Short description <small>Optional</small></span
+                ><textarea
+                  id="reference-description"
+                  maxlength="280"
+                  rows="3"
+                  placeholder="e.g. Gentle, intimate, good for reflective pieces"
+                ></textarea>
+              </label>
+              <label class="reference-favorite-check"
+                ><input id="reference-favorite-checkbox" type="checkbox" /><span
+                  >Favorite</span
+                ></label
+              >
+              <div class="dialog-actions">
+                <button type="button" class="button ghost" data-reference-close>
+                  Cancel</button
+                ><button type="submit" class="button primary">
+                  Save details
+                </button>
+              </div>
+            </form>
+          </dialog>
         </section>
-        <dialog id="reference-folder-dialog" class="modal reference-dialog">
-          <form id="reference-folder-form" method="dialog">
-            <div class="modal-head"><div><p class="eyebrow">Reference library</p><h3 id="reference-folder-dialog-title">Create folder</h3></div><button type="button" class="icon-button" data-reference-close aria-label="Close">×</button></div>
-            <label><span>Folder name</span><input id="reference-folder-name" maxlength="80" required placeholder="e.g. Warm / Emotional"></label>
-            <p class="reference-form-hint">Only the folder name is required.</p>
-            <div class="dialog-actions"><button type="button" class="button ghost" data-reference-close>Cancel</button><button type="submit" class="button primary">Save folder</button></div>
-          </form>
-        </dialog>
-        <dialog id="reference-add-dialog" class="modal reference-dialog reference-add-dialog">
-          <form id="reference-add-form" method="dialog">
-            <div class="modal-head"><div><p class="eyebrow">Reference library</p><h3>Add voices</h3><p>Select as many voices as you want. No alias or description is required.</p></div><button type="button" class="icon-button" data-reference-close aria-label="Close">×</button></div>
-            <div id="reference-add-list" class="reference-add-list"></div>
-            <div class="dialog-actions"><button type="button" class="button ghost" data-reference-close>Cancel</button><button id="reference-add-submit" type="submit" class="button primary" disabled>Add selected voices</button></div>
-          </form>
-        </dialog>
-        <dialog id="reference-meta-dialog" class="modal reference-dialog">
-          <form id="reference-meta-form" method="dialog">
-            <div class="modal-head"><div><p class="eyebrow">Optional details</p><h3 id="reference-meta-heading">Reference voice</h3></div><button type="button" class="icon-button" data-reference-close aria-label="Close">×</button></div>
-            <label><span>Alias <small>Optional</small></span><input id="reference-alias" maxlength="80" placeholder="e.g. Phoebe — soft essay"></label>
-            <label><span>Short description <small>Optional</small></span><textarea id="reference-description" maxlength="280" rows="3" placeholder="e.g. Gentle, intimate, good for reflective pieces"></textarea></label>
-            <label class="reference-favorite-check"><input id="reference-favorite-checkbox" type="checkbox"><span>Favorite</span></label>
-            <div class="dialog-actions"><button type="button" class="button ghost" data-reference-close>Cancel</button><button type="submit" class="button primary">Save details</button></div>
-          </form>
-        </dialog>
-      </section>
 
         <section id="post-view" class="view hidden">
           <button id="back-button" class="back">
@@ -321,28 +475,51 @@
 
           <div class="workspace">
             <div class="story-column">
-            <section class="panel document-panel">
-              <div class="panel-head">
-                <h3 id="document-heading">Narration text</h3>
-                <button id="document-expand" class="text-button document-expand" type="button" aria-expanded="false" aria-controls="document-preview">Expand text</button>
-              </div>
-              <article id="document-preview" class="document-preview" tabindex="0" aria-label="Narration text"></article>
-            </section>
+              <section class="panel document-panel">
+                <div class="panel-head">
+                  <h3 id="document-heading">Narration text</h3>
+                  <button
+                    id="document-expand"
+                    class="text-button document-expand"
+                    type="button"
+                    aria-expanded="false"
+                    aria-controls="document-preview"
+                  >
+                    Expand text
+                  </button>
+                </div>
+                <article
+                  id="document-preview"
+                  class="document-preview"
+                  tabindex="0"
+                  aria-label="Narration text"
+                ></article>
+              </section>
 
-            <section class="history-section" aria-labelledby="audio-history-heading">
-          <div class="generation-header">
-            <div><h3 id="audio-history-heading">Audio history</h3><p class="history-subtitle">Listen, compare, and choose your preferred take.</p></div>
-            <div class="generation-header-actions">
-              <div id="compare-tray" class="compare-tray hidden">
-                <span class="compare-label">Comparing</span>
-                <div id="compare-chips" class="compare-chips"></div>
-                <button id="compare-clear" class="text-button">Clear</button>
-              </div>
-              <span id="generation-count" class="count"></span>
-            </div>
-          </div>
-          <div id="generation-list" class="generation-list"></div>
-            </section>
+              <section
+                class="history-section"
+                aria-labelledby="audio-history-heading"
+              >
+                <div class="generation-header">
+                  <div>
+                    <h3 id="audio-history-heading">Audio history</h3>
+                    <p class="history-subtitle">
+                      Listen, compare, and choose your preferred take.
+                    </p>
+                  </div>
+                  <div class="generation-header-actions">
+                    <div id="compare-tray" class="compare-tray hidden">
+                      <span class="compare-label">Comparing</span>
+                      <div id="compare-chips" class="compare-chips"></div>
+                      <button id="compare-clear" class="text-button">
+                        Clear
+                      </button>
+                    </div>
+                    <span id="generation-count" class="count"></span>
+                  </div>
+                </div>
+                <div id="generation-list" class="generation-list"></div>
+              </section>
             </div>
 
             <aside class="panel composer">
@@ -370,29 +547,34 @@
                   <select id="quote-voice-select"></select>
                 </div>
 
-              <div class="pace-control">
-                <div class="pace-control-head">
-                  <label for="tempo-percent">Narration pace</label>
-                  <output id="tempo-value" for="tempo-percent">Original</output>
+                <div class="pace-control">
+                  <div class="pace-control-head">
+                    <label for="tempo-percent">Narration pace</label>
+                    <output id="tempo-value" for="tempo-percent"
+                      >Original</output
+                    >
+                  </div>
+                  <input
+                    id="tempo-percent"
+                    type="range"
+                    min="65"
+                    max="85"
+                    step="2"
+                    value="85"
+                    aria-label="Narration pace"
+                    aria-describedby="tempo-help"
+                    aria-valuetext="Original"
+                  />
+                  <div class="pace-scale" aria-hidden="true">
+                    <span>Very slow</span>
+                    <span>Steady</span>
+                    <span>Original</span>
+                  </div>
                 </div>
-                <input
-                  id="tempo-percent"
-                  type="range"
-                  min="65"
-                  max="85"
-                  step="2"
-                  value="85"
-                  aria-label="Narration pace"
-                  aria-describedby="tempo-help"
-                  aria-valuetext="Original"
-                >
-                <div class="pace-scale" aria-hidden="true">
-                  <span>Very slow</span>
-                  <span>Steady</span>
-                  <span>Original</span>
-                </div>
-              </div>
-              <p id="tempo-help" class="pace-help">Sets the pace of new audio. Existing recordings stay unchanged.</p>
+                <p id="tempo-help" class="pace-help">
+                  Sets the pace of new audio. Existing recordings stay
+                  unchanged.
+                </p>
 
                 <button
                   id="generate-button"
@@ -404,8 +586,6 @@
               </form>
             </aside>
           </div>
-
-
         </section>
       </main>
     </div>
@@ -507,9 +687,17 @@
             <use href="#icon-download"></use>
           </svg>
         </a>
-        <button id="player-link" class="player-btn ghost-btn" type="button" aria-label="Copy link to this take" title="Copy link to this take">
+        <button
+          id="player-link"
+          class="player-btn ghost-btn"
+          type="button"
+          aria-label="Copy link to this take"
+          title="Copy link to this take"
+        >
           <svg class="icon" aria-hidden="true" viewBox="0 0 24 24">
-            <path d="M10 13a5 5 0 0 0 7 .2l3-3a5 5 0 0 0-7-7l-1.7 1.7M14 11a5 5 0 0 0-7-.2l-3 3a5 5 0 0 0 7 7l1.7-1.7" />
+            <path
+              d="M10 13a5 5 0 0 0 7 .2l3-3a5 5 0 0 0-7-7l-1.7 1.7M14 11a5 5 0 0 0-7-.2l-3 3a5 5 0 0 0 7 7l1.7-1.7"
+            />
           </svg>
         </button>
         <button
@@ -527,23 +715,48 @@
       <audio id="player-audio" preload="metadata"></audio>
     </div>
 
-    <dialog id="confirmation-dialog" class="confirmation-dialog" aria-labelledby="confirmation-title" aria-describedby="confirmation-message">
+    <dialog
+      id="confirmation-dialog"
+      class="confirmation-dialog"
+      aria-labelledby="confirmation-title"
+      aria-describedby="confirmation-message"
+    >
       <form method="dialog">
         <div class="dialog-head">
           <h2 id="confirmation-title">Confirm action</h2>
         </div>
         <p id="confirmation-message" class="confirmation-message"></p>
         <div class="dialog-actions">
-          <button id="confirmation-cancel" class="button ghost" type="submit" value="cancel" autofocus>Cancel</button>
-          <button id="confirmation-accept" class="button primary" type="submit" value="confirm">Confirm</button>
+          <button
+            id="confirmation-cancel"
+            class="button ghost"
+            type="submit"
+            value="cancel"
+            autofocus
+          >
+            Cancel
+          </button>
+          <button
+            id="confirmation-accept"
+            class="button primary"
+            type="submit"
+            value="confirm"
+          >
+            Confirm
+          </button>
         </div>
       </form>
     </dialog>
 
-    <dialog id="voice-generations-dialog" aria-labelledby="voice-generations-title">
+    <dialog
+      id="voice-generations-dialog"
+      aria-labelledby="voice-generations-title"
+    >
       <form method="dialog" class="dialog-head">
         <h2 id="voice-generations-title">Voice generations</h2>
-        <button class="dialog-close" aria-label="Close voice generations">×</button>
+        <button class="dialog-close" aria-label="Close voice generations">
+          ×
+        </button>
       </form>
       <div id="voice-generations-list" aria-live="polite"></div>
     </dialog>
@@ -601,7 +814,10 @@
       </form>
     </dialog>
 
-    <script type="module" src="/studio/app.js?v=20260906-compatible-ui"></script>
+    <script
+      type="module"
+      src="/studio/app.js?v=20260906-compatible-ui"
+    ></script>
     <script src="/studio/reference-library.js" defer></script>
-</body>
+  </body>
 </html>
