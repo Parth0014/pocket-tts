@@ -436,7 +436,7 @@ def build_runtime_config(base_dir, environment):
         ),
         "quote_reference_audio": resolve_config_path(quote_reference, base_dir),
         "quote_mode": environment.get("NARRATION_QUOTE_MODE", "preserve").strip().lower(),
-        "profile": environment.get("NARRATION_PROFILE", "balanced").strip().lower(),
+        "profile": environment.get("NARRATION_PROFILE", "faithful").strip().lower(),
         "speed": float(environment.get("NARRATION_SPEED", "1.0")),
         "reference_start_seconds": optional_float(environment.get("NARRATION_REFERENCE_START")),
         "quote_reference_start_seconds": optional_float(environment.get("NARRATION_QUOTE_REFERENCE_START")),
@@ -1167,12 +1167,13 @@ def run_pipeline(
     output_dir=None,
     speed: float = 1.0,
     *,
-    profile="balanced",
+    profile="faithful",
     reference_start_seconds=None,
     quote_reference_start_seconds=None,
     seed=SEED,
     max_chunks=None,
     mastering="auto",
+    spectral_matching=True,
 ):
     """Generate local audio and an audit report; shared by CLI and AWS worker.
 
@@ -1199,6 +1200,8 @@ def run_pipeline(
     settings = get_profile(profile)
     if mastering not in {"off", "auto", "natural", "warm_story"}:
         raise ValueError("mastering must be off, auto, natural, or warm_story")
+    if not isinstance(spectral_matching, bool):
+        raise ValueError("spectral_matching must be a boolean")
     if isinstance(seed, bool) or not isinstance(seed, int) or not 0 <= seed < 2**31:
         raise ValueError("seed must be an integer in [0, 2147483647]")
     if max_chunks is not None and (
@@ -1565,7 +1568,11 @@ def run_pipeline(
             )
         )
 
+    span_offset = lead_zero
+    speech_spans = []
     for index, item in enumerate(final_chunks):
+        speech_spans.append((span_offset, span_offset + item["audio"].shape[1], all_chunks[index]["role"]))
+        span_offset += item["audio"].shape[1]
         pieces.append(item["audio"])
         if index == len(final_chunks) - 1:
             continue
@@ -1579,6 +1586,7 @@ def run_pipeline(
 
         target_samples = int(round(sr * target_ms / 1000))
         inserted_zero = max(target_samples - natural_pad, 0)
+        span_offset += inserted_zero
         if inserted_zero:
             pieces.append(
                 torch.zeros(
@@ -1601,8 +1609,14 @@ def run_pipeline(
         # Preserve legacy activity detection/pause placement, then undo its shared
         # peak gain so mastering receives the original assembled signal level.
         premaster = (joined_audio / shared_gain).squeeze(0).cpu().numpy()
+        spectral_reports = None
+        if spectral_matching:
+            from spectral_matching import match_roles
+
+            premaster, spectral_reports = match_roles(premaster, sr, speech_spans, anchor_paths, ffmpeg=ffmpeg_path)
         mastered, mastering_report = master_audio(
             premaster, sr, mastering, ffmpeg=ffmpeg_path, temp_dir=config["internal_dir"],
+            spectral_reports=spectral_reports,
         )
         joined_audio = torch.from_numpy(mastered).unsqueeze(0)
 
@@ -1674,6 +1688,7 @@ def main(argv=None):
     parser.add_argument("--quote-reference-start", type=float, default=config["quote_reference_start_seconds"])
     parser.add_argument("--max-chunks", type=int, help="Limit generation for a short preview")
     parser.add_argument("--mastering", choices=("off", "auto", "natural", "warm_story"), default="auto")
+    parser.add_argument("--no-spectral-match", action="store_true", help="Bypass reference-derived EQ")
     parser.add_argument("--output-dir", default=config["output_dir"])
     args = parser.parse_args(argv)
     return run_pipeline(
@@ -1683,6 +1698,7 @@ def main(argv=None):
         reference_start_seconds=args.reference_start,
         quote_reference_start_seconds=args.quote_reference_start,
         seed=args.seed, max_chunks=args.max_chunks, mastering=args.mastering,
+        spectral_matching=not args.no_spectral_match,
     )
 
 

@@ -18,7 +18,9 @@ from pathlib import Path
 import numpy as np
 import soundfile as sf
 
-VERSION = "mastering-v2"
+from spectral_matching import spectral_match
+
+VERSION = "mastering-v3"
 PROFILES = ("off", "auto", "natural", "warm_story")
 TRUE_PEAK = -1.5
 
@@ -125,7 +127,7 @@ def analyze_spectrum(path):
     return {"below_50hz_energy_fraction": low / max(total, 1e-30)}
 
 
-def automatic_plan(before, spectrum, target):
+def automatic_plan(before, spectrum, target, spectral_reports=None):
     """Conservative, versioned heuristics: only correct measured technical issues."""
     filters, decisions = [], []
     low_fraction = spectrum["below_50hz_energy_fraction"]
@@ -149,14 +151,16 @@ def automatic_plan(before, spectrum, target):
         pre_gain = min(12.0, max(-24.0, -23.0 - before["input_i"]))
         filters.extend([f"volume={pre_gain:.6f}dB",
                         f"acompressor=threshold=0.125:ratio={ratio:.6f}:attack=25:release=160:makeup=1:knee=2.828"])
-    decisions.append({"stage": "tone_boost", "enabled": False,
-                      "reason": "Warmth and presence are aesthetic choices, not reliably inferred defects"})
+    matched = any(item.get("enabled", False) for item in (spectral_reports or {}).values())
+    decisions.append({"stage": "tone_boost", "enabled": matched,
+                      "reason": "Reference-derived bounded match EQ applied before this measurement" if matched
+                      else "No accepted reference-derived correction; preserve tone"})
     decisions.append({"stage": "loudness", "enabled": True, "target_lufs": target,
                       "reason": "Measure and normalize the complete narration, preserving dynamic range where possible"})
     return ",".join(filters) or "anull", decisions
 
 
-def master_file(source, destination, profile="auto", *, ffmpeg=None):
+def master_file(source, destination, profile="auto", *, ffmpeg=None, anchor_path=None, spectral_reports=None):
     """Write a verified WAV without overwriting files; return a JSON-safe audit report.
 
     Off mode copies bytes exactly and requires neither FFmpeg nor loudness analysis.
@@ -180,10 +184,21 @@ def master_file(source, destination, profile="auto", *, ffmpeg=None):
             info, signal = _validate(source)
             executable = ffmpeg or resolve_ffmpeg()
             target = -19 if info.channels == 1 else -16
+            if anchor_path is not None:
+                samples, _ = sf.read(source, dtype="float32", always_2d=info.channels > 1)
+                corrected, match_report = spectral_match(anchor_path, samples, info.samplerate, ffmpeg=executable)
+                report["before_spectral"] = measure(source, executable, target)
+                spectral_reports = {"narration": match_report}
+                matched_path = Path(temporary) / "spectral.wav"
+                sf.write(matched_path, corrected, info.samplerate, subtype="FLOAT")
+                source = matched_path
+                _, signal = _validate(source)
+            if spectral_reports is not None:
+                report["spectral_matching"] = spectral_reports
             before = measure(source, executable, target)
             if profile == "auto":
                 spectrum = analyze_spectrum(source)
-                tone, decisions = automatic_plan(before, spectrum, target)
+                tone, decisions = automatic_plan(before, spectrum, target, spectral_reports)
                 report.update(analysis=spectrum, decisions=decisions)
             else:
                 tone = _tone(profile, before["input_i"])
@@ -237,7 +252,7 @@ def master_file(source, destination, profile="auto", *, ffmpeg=None):
     return report
 
 
-def master_audio(samples, sample_rate, profile="auto", *, ffmpeg=None, temp_dir=None):
+def master_audio(samples, sample_rate, profile="auto", *, ffmpeg=None, temp_dir=None, spectral_reports=None):
     """Accept samples in frames or frames x channels layout; return PCM16-grid float samples."""
     if profile not in PROFILES:
         raise ValueError(f"Unknown mastering profile: {profile}")
@@ -246,12 +261,12 @@ def master_audio(samples, sample_rate, profile="auto", *, ffmpeg=None, temp_dir=
     with tempfile.TemporaryDirectory(prefix="master_audio_", dir=temp_dir) as directory:
         source, destination = Path(directory) / "input.wav", Path(directory) / "output.wav"
         sf.write(source, samples, sample_rate, subtype="FLOAT")
-        report = master_file(source, destination, profile, ffmpeg=ffmpeg)
+        report = master_file(source, destination, profile, ffmpeg=ffmpeg, spectral_reports=spectral_reports)
         result, _ = sf.read(destination, dtype="float32", always_2d=np.asarray(samples).ndim == 2)
     return result, report
 
 
-def compare(source, directory):
+def compare(source, directory, anchor_path=None):
     """Create delivery masters and gain-only, loudness-matched audition copies."""
     directory = Path(directory)
     directory.mkdir(parents=True, exist_ok=False)
@@ -259,7 +274,8 @@ def compare(source, directory):
     reports = {}
     for profile in PROFILES:
         output = directory / f"{profile}.wav"
-        reports[profile] = master_file(source, output, profile, ffmpeg=executable)
+        reports[profile] = master_file(source, output, profile, ffmpeg=executable,
+                                      anchor_path=anchor_path if profile == "auto" else None)
     measurements = {profile: measure(directory / f"{profile}.wav", executable) for profile in PROFILES}
     common = min(value["input_i"] for value in measurements.values())
     cards = []
@@ -291,17 +307,18 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("source", type=Path)
     parser.add_argument("--profile", choices=PROFILES, default="auto")
+    parser.add_argument("--anchor", type=Path, help="Exact prepared speaker anchor for automatic match EQ")
     outputs = parser.add_mutually_exclusive_group(required=True)
     outputs.add_argument("--output", type=Path)
     outputs.add_argument("--compare-dir", type=Path, help="New folder for all presets and an A/B player")
     args = parser.parse_args(argv)
     if args.compare_dir:
-        print(compare(args.source, args.compare_dir))
+        print(compare(args.source, args.compare_dir, args.anchor))
     else:
         report_path = args.output.with_suffix(".mastering.json")
         if report_path.exists():
             raise FileExistsError(report_path)
-        report = master_file(args.source, args.output, args.profile)
+        report = master_file(args.source, args.output, args.profile, anchor_path=args.anchor)
         report_path.write_text(json.dumps(report, indent=2, allow_nan=False), encoding="utf-8")
         print(args.output)
 

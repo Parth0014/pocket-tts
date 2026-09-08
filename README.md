@@ -67,10 +67,15 @@ Mastering defaults to `auto` for generation on this experimental branch, includi
 callers of `run_pipeline`. No deployment has been performed. Use `--mastering off`
 (or `mastering="off"` in Python) for the original behavior.
 It runs locally using bundled FFmpeg, with no model download or Adobe service.
+Generation now also defaults to the conservative `faithful` profile unless explicitly
+overridden, and matches each speaker's broad tonal balance to their prepared reference
+anchor before mastering. Matching is bounded to +/-3 dB at the default strength, with
+spectral regression checks and conditional de-essing. Use `--no-spectral-match` to bypass it.
+See [advanced audio setup, evidence, and limitations](docs/advanced-audio.md).
 Activate the `pockettts` environment, then compare an existing narration:
 
 ```powershell
-python narration_mastering.py output/narration_0005.wav --compare-dir output/my-mastering-comparison
+python narration_mastering.py output/narration_0005.wav --anchor output/_internal/voice_anchor_narration_d19e33b21421778cb29e.wav --compare-dir output/my-mastering-comparison
 ```
 
 Open `output/my-mastering-comparison/index.html` to switch between Original (`off`),
@@ -103,8 +108,9 @@ the standalone mastering command still requires three seconds. Off mode preserve
 
 Reports record exact filters, processor version, hashes, timing, loudness, true peak, and
 warnings. Dynamic loudness fallback and target deviation are reported. Generation caches
-are independent of mastering settings. No denoising, neural restoration, de-essing,
-reverb, or artificial emotion is applied in this first experiment. Compare by listening;
+are independent of mastering settings. Normal generation does not use neural restoration,
+denoising, reverb, or artificial emotion. Separate optional speaker scoring and gated
+neural experiments are described in the advanced guide. Compare by listening;
 measurements cannot establish better storytelling. See [research and design](docs/audio-enhancement-research.md).
 
 ## Tests

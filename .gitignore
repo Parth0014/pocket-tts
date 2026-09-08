@@ -10,6 +10,7 @@ __pycache__/
 *.pyd
 .Python
 .venv/
+.venv-quality/
 venv/
 env/
 build/

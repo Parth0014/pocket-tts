@@ -29,9 +29,10 @@ pocket-tts-narrate = "generate_narration:main"
 pocket-tts-reference = "reference_audio:main"
 pocket-tts-preview = "narration_preview:main"
 pocket-tts-master = "narration_mastering:main"
+pocket-tts-speaker-check = "speaker_similarity:main"
 
 [tool.setuptools]
-py-modules = ["chunking", "extractor", "generate_narration", "narration_script", "worker_document", "reference_audio", "narration_quality", "narration_preview", "narration_mastering"]
+py-modules = ["chunking", "extractor", "generate_narration", "narration_script", "worker_document", "reference_audio", "narration_quality", "narration_preview", "narration_mastering", "spectral_matching", "speaker_similarity", "neural_restoration"]
 packages = ["narration_content"]
 
 [tool.pytest.ini_options]
