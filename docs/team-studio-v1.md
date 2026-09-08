@@ -124,3 +124,18 @@ can be added later when team-member identity exists.
 
 This feature does not change the worker job/status contracts, TTS container,
 worker queues, or production audio paths.
+
+## Voice restore deployment route
+
+Deploying the Lambda handler alone is insufficient: this HTTP API has explicit
+Studio routes and a default route pointing to another backend. Ensure
+`POST /studio-api/voices/{voice_id}/restore` targets the same integration as
+`POST /studio-api/voices/{voice_id}/archive`.
+
+On API `za7yry02le`, both routes target `integrations/syg2x48` (Team Studio).
+The `$default` stage auto-deploys route changes. Authentication remains enforced
+by the Studio Lambda session check, as with the archive route.
+
+Verify an authenticated restore request and then confirm ACTIVE status from the
+voice list. An unauthenticated 401 alone does not prove correct routing because
+the default backend also requires authentication.
